@@ -514,7 +514,7 @@ def app():
     up = (r["fair"] / r["price"] - 1) * 100 if r["fair"] and r["price"] else None
     m[3].metric("Upside to fair", pct(up, True))
     if d.get("hi52") and d.get("lo52") and r["price"]:
-        m[4].metric("52-week range", f"{rs(d['lo52'])} - {rs(d['hi52'])}",
+        m[4].metric("52-week low / high", f"{d['lo52']:,.0f} / {d['hi52']:,.0f}",
                     f"{(r['price'] / d['hi52'] - 1) * 100:.1f}% from high", delta_color="off")
 
     tab1, tab2, tab3, tab4 = st.tabs(["Verdict details", "Price chart", "Future price", "Financials"])
