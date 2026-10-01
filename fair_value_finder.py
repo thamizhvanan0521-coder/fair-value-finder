@@ -457,7 +457,21 @@ def cli(argv):
 # Streamlit web app
 # ----------------------------------------------------------------------------
 
+# NIFTY 50 constituents from NSE's official list (nsearchives.nseindia.com ind_nifty50list.csv, Oct 2026)
+NIFTY50 = [
+    "ADANIENT", "ADANIPORTS", "APOLLOHOSP", "ASIANPAINT", "AXISBANK", "BSE", "BAJAJ-AUTO", "BAJFINANCE",
+    "BAJAJFINSV", "BEL", "BHARTIARTL", "CIPLA", "COALINDIA", "DRREDDY", "EICHERMOT", "ETERNAL", "GRASIM",
+    "HCLTECH", "HDFCBANK", "HDFCLIFE", "HINDALCO", "HINDUNILVR", "ICICIBANK", "ITC", "INFY", "INDIGO",
+    "JSWSTEEL", "JIOFIN", "KOTAKBANK", "LT", "M&M", "MARUTI", "MAXHEALTH", "NTPC", "NESTLEIND", "ONGC",
+    "POWERGRID", "RELIANCE", "SBILIFE", "SHRIRAMFIN", "SBIN", "SUNPHARMA", "TCS", "TATACONSUM", "TMPV",
+    "TATASTEEL", "TECHM", "TITAN", "TRENT", "ULTRACEMCO",
+]
+
+VERDICT_ORDER = ["BUY ZONE", "NEAR FAIR VALUE", "ABOVE FAIR VALUE - NO BUY", "AVOID", "CAN'T VALUE", "No price"]
+
+
 def app():
+    import time
     import pandas as pd
     import streamlit as st
 
@@ -472,7 +486,7 @@ def app():
         terminal = st.slider("Terminal growth %", 2.0, 7.0, 5.0, 0.5)
         st.caption("Fair value = median of historical P/E, growth P/E, Graham number, and DCF "
                    "(or justified P/B for banks).")
-        with st.expander("Correct Yahoo's numbers (optional)"):
+        with st.expander("Correct Yahoo's numbers (optional, single stock only)"):
             st.caption("Leave at 0 to use Yahoo's value. Copy the right figure from Screener.in if Yahoo is wrong or blank.")
             ov_eps = st.number_input("EPS (TTM) Rs", min_value=0.0, value=0.0, step=0.5)
             ov_bv = st.number_input("Book value / share Rs", min_value=0.0, value=0.0, step=1.0)
@@ -480,6 +494,90 @@ def app():
             ov_g = st.number_input("Growth for valuation % (e.g. Screener 5-yr profit growth)", min_value=0.0, value=0.0, step=0.5)
     overrides = {"eps": ov_eps or None, "bvps": ov_bv or None, "roe": ov_roe or None, "growth": ov_g or None}
 
+    @st.cache_data(ttl=3600, show_spinner=False)
+    def cached_fetch(s):
+        time.sleep(0.3)  # gentle on Yahoo; only runs when the result is not already cached
+        return fetch(s)
+
+    tab_single, tab_scan = st.tabs(["Single stock", "NIFTY 50 scanner"])
+    with tab_single:
+        single_view(st, pd, cached_fetch, discount, terminal, mos, overrides)
+    with tab_scan:
+        scanner_view(st, pd, cached_fetch, discount, terminal, mos)
+
+
+def scanner_view(st, pd, cached_fetch, discount, terminal, mos):
+    st.markdown("#### Which NIFTY 50 stocks are in the buy zone right now?")
+    st.caption("Runs every NIFTY 50 stock through the same checks as the single-stock page, using your sidebar "
+               "settings. The first scan takes 1-3 minutes; results are kept for an hour, so it is quick after that.")
+    if st.button("Run NIFTY 50 scan", type="primary"):
+        st.session_state["scan_on"] = True
+    if not st.session_state.get("scan_on"):
+        st.info("Press 'Run NIFTY 50 scan' to check all 50 stocks.")
+        return
+
+    rows, failed = [], []
+    bar = st.progress(0.0, text="Starting scan...")
+    for i, s in enumerate(NIFTY50):
+        bar.progress(i / len(NIFTY50), text=f"Checking {s} ({i + 1}/{len(NIFTY50)})")
+        try:
+            d = cached_fetch(s)
+        except Exception:
+            failed.append(s)
+            continue
+        r = analyse(d, discount, terminal, mos)
+        up = (r["fair"] / r["price"] - 1) * 100 if r["fair"] and r["price"] else None
+        rows.append({
+            "Symbol": s,
+            "Company": d["name"],
+            "Verdict": r["verdict"],
+            "Price": r["price"],
+            "Fair value": r["fair"],
+            "Buy below": r["buy_below"],
+            "Upside %": up,
+            "Quality %": r["quality"],
+            "From 52w high %": ((r["price"] / d["hi52"] - 1) * 100) if (d.get("hi52") and r["price"]) else None,
+            "Sector": d["sector"],
+        })
+    bar.empty()
+
+    if not rows:
+        st.error("Yahoo didn't return data for any stock. It may be limiting requests; wait a few minutes and press the button again.")
+        return
+
+    df = pd.DataFrame(rows)
+    counts = df["Verdict"].value_counts()
+    c = st.columns(4)
+    c[0].metric("Buy zone", int(counts.get("BUY ZONE", 0)))
+    c[1].metric("Near fair value", int(counts.get("NEAR FAIR VALUE", 0)))
+    c[2].metric("Above fair value", int(counts.get("ABOVE FAIR VALUE - NO BUY", 0)))
+    c[3].metric("Avoid (weak fundamentals)", int(counts.get("AVOID", 0)))
+
+    present = [v for v in VERDICT_ORDER if v in set(df["Verdict"])]
+    show = st.multiselect("Show", present, default=present)
+    view = df[df["Verdict"].isin(show)].copy()
+    view["_o"] = view["Verdict"].map({v: i for i, v in enumerate(VERDICT_ORDER)})
+    view = view.sort_values(["_o", "Upside %"], ascending=[True, False]).drop(columns="_o")
+    st.dataframe(
+        view, hide_index=True, width="stretch",
+        column_config={
+            "Price": st.column_config.NumberColumn(format="Rs %.0f"),
+            "Fair value": st.column_config.NumberColumn(format="Rs %.0f"),
+            "Buy below": st.column_config.NumberColumn(format="Rs %.0f"),
+            "Upside %": st.column_config.NumberColumn(format="%+.1f%%"),
+            "Quality %": st.column_config.NumberColumn(format="%d%%"),
+            "From 52w high %": st.column_config.NumberColumn(format="%+.1f%%"),
+        },
+    )
+    st.caption("Sorted: buy zone first, then by upside to fair value. For full details of any stock, "
+               "type its symbol in the 'Single stock' tab.")
+    if failed:
+        st.warning(f"Yahoo didn't return data for {len(failed)} stock(s): {', '.join(failed)}. "
+                   "Press 'Run NIFTY 50 scan' again in a minute to retry them.")
+    st.caption("A buy-zone verdict is a starting point for your own research, not a recommendation.")
+
+
+def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
     c1, c2 = st.columns([4, 1])
     sym = c1.text_input("NSE symbol", value="", placeholder="e.g. TCS, SBIN, TATASTEEL, HDFCBANK")
     c2.write("")
@@ -487,10 +585,6 @@ def app():
     if not sym:
         st.info("Type an NSE symbol and press Analyse.")
         return
-
-    @st.cache_data(ttl=900, show_spinner=False)
-    def cached_fetch(s):
-        return fetch(s)
 
     with st.spinner(f"Fetching {to_yahoo(sym)} from Yahoo Finance..."):
         try:
