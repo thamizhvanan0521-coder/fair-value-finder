@@ -541,7 +541,7 @@ h4 {{ font-weight: 700; }}
             border: 1px solid rgba(201,169,98,.35); box-shadow: {SHADOW}; }}
 .fvf-brandrow {{ display: flex; align-items: center; gap: .7rem; }}
 .fvf-logo {{ width: 38px; height: 38px; color: {GOLD}; flex: 0 0 auto; }}
-.fvf-brand {{ font-size: 2.15rem; font-weight: 800; line-height: 1.05; margin: 0; color: #fff; }}
+.fvf-head .fvf-brand {{ font-size: 2.15rem; font-weight: 800; line-height: 1.05; margin: 0; color: #fff; }}
 .fvf-tag {{ color: #C5CCE0; margin: .65rem 0 1.15rem; font-size: 1.07rem; line-height: 1.5; max-width: 60ch; }}
 .fvf-contact {{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .7rem 1rem;
                border-top: 1px solid rgba(201,169,98,.3); padding-top: 1rem; }}
@@ -559,7 +559,7 @@ h4 {{ font-weight: 700; }}
             background: {CARD}; border: 1px solid {LINE}; border-left: 5px solid {GOLD}; border-radius: 16px;
             padding: 1.5rem 1.7rem; margin: .4rem 0 1.1rem; box-shadow: {SHADOW}; }}
 .fvf-hero-text {{ flex: 1 1 360px; min-width: 0; }}
-.fvf-name {{ font-size: 2rem; font-weight: 800; line-height: 1.12; margin: 0; }}
+.fvf-hero .fvf-name {{ font-size: 2rem; font-weight: 800; line-height: 1.12; margin: 0; }}
 .fvf-sub {{ color: {MUTED}; font-size: .95rem; margin: .35rem 0 .85rem; }}
 .fvf-reason {{ font-size: 1.06rem; line-height: 1.55; max-width: 62ch; margin: 0; color: #1A1F36; }}
 .fvf-stamp {{ flex: 0 0 auto; transform: rotate(-6deg); border: 4px double var(--c); color: var(--c);
@@ -598,8 +598,8 @@ h4 {{ font-weight: 700; }}
 
 @media (max-width: 640px) {{
   .fvf-head {{ padding: 1.2rem 1.1rem 1rem; border-radius: 16px; }}
-  .fvf-brand {{ font-size: 1.65rem; }} .fvf-logo {{ width: 30px; height: 30px; }}
-  .fvf-name {{ font-size: 1.5rem; }} .fvf-hero {{ padding: 1.1rem; }} .fvf-stamp {{ font-size: 1.1rem; }}
+  .fvf-head .fvf-brand {{ font-size: 1.65rem; }} .fvf-logo {{ width: 30px; height: 30px; }}
+  .fvf-hero .fvf-name {{ font-size: 1.5rem; }} .fvf-hero {{ padding: 1.1rem; }} .fvf-stamp {{ font-size: 1.1rem; }}
 }}
 </style>
 """
@@ -616,15 +616,15 @@ def hero_html(d, r):
     if r["lender"]:
         sub += " | valued as a bank/NBFC"
     q = "" if r["quality"] is None else f"<small>Quality {r['quality']}%</small>"
-    return (f'<div class="fvf-hero"><div class="fvf-hero-text"><p class="fvf-name">{_esc(d["name"])}</p>'
+    return (f'<div class="fvf-hero"><div class="fvf-hero-text"><div class="fvf-name">{_esc(d["name"])}</div>'
             f'<p class="fvf-sub">{_esc(sub)}</p><p class="fvf-reason">{_esc(r["reason"])}</p></div>'
             f'<div class="fvf-stamp" style="--c:{c}" role="img" aria-label="Verdict: {_esc(r["verdict"])}">'
-            f'{_esc(r["verdict"])}{q}</div></div>')
+            f'{_esc(r["verdict"]).replace(" - ", "<br>")}{q}</div></div>')
 
 
 def header_html():
     wa = f"https://wa.me/91{CONTACT_PHONE}?text=" + "Hi%2C%20I%20would%20like%20to%20learn%20trading%20and%20options%20buying."
-    return (f'<div class="fvf-head"><div class="fvf-brandrow">{LOGO_SVG}<p class="fvf-brand">Fair Value Finder</p></div>'
+    return (f'<div class="fvf-head"><div class="fvf-brandrow">{LOGO_SVG}<div class="fvf-brand">Fair Value Finder</div></div>'
             '<p class="fvf-tag">Type any NSE stock to see what it is really worth, how strong the business is, '
             'and whether today\'s price is a bargain.</p>'
             f'<div class="fvf-contact"><p><b>{CONTACT_LINE}.</b> Call or WhatsApp {CONTACT_DISPLAY}.</p>'
@@ -654,11 +654,12 @@ def gauge_fig(r):
     hi = max(fair * 1.5, price * 1.1)
     fig = go.Figure(go.Indicator(
         mode="gauge+number+delta", value=price,
-        number=dict(prefix="₹", valueformat=",.0f", font=dict(size=34, family="Bricolage Grotesque, " + FONT, color=INK)),
+        number=dict(prefix="₹", valueformat=",.0f", font=dict(size=28, family="Bricolage Grotesque, " + FONT, color=INK)),
         delta=dict(reference=fair, relative=True, valueformat="+.0%", suffix=" vs fair",
                    increasing=dict(color=TONE["bad"]), decreasing=dict(color=TONE["good"])),
         gauge=dict(
-            axis=dict(range=[lo, hi], tickprefix="₹", tickformat=",.0f", tickcolor=MUTED, nticks=6),
+            axis=dict(range=[lo, hi], tickprefix="₹", tickformat=",.0f", tickcolor=MUTED, nticks=4,
+                      tickfont=dict(size=11, color=MUTED)),
             bar=dict(color=INK, thickness=0.22),
             bgcolor=CARD, borderwidth=0,
             steps=[dict(range=[lo, bb], color="#D7EBDF"),
@@ -667,7 +668,9 @@ def gauge_fig(r):
             threshold=dict(line=dict(color=INK, width=3), thickness=0.85, value=fair),
         ),
     ))
-    return _base_layout(fig, 260)
+    fig = _base_layout(fig, 250)
+    fig.update_layout(margin=dict(l=34, r=34, t=36, b=6))
+    return fig
 
 
 def radar_fig(card):
@@ -682,9 +685,11 @@ def radar_fig(card):
     fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)",
                                  radialaxis=dict(range=[0, 100], tickvals=[25, 50, 75, 100], showticklabels=False,
                                                  gridcolor=LINE, linecolor=LINE),
-                                 angularaxis=dict(gridcolor=LINE, linecolor=LINE)),
+                                 angularaxis=dict(gridcolor=LINE, linecolor=LINE, tickfont=dict(size=12))),
                       showlegend=False)
-    return _base_layout(fig, 260)
+    fig = _base_layout(fig, 280)
+    fig.update_layout(margin=dict(l=70, r=70, t=30, b=30))
+    return fig
 
 
 def candle_fig(ohlc, fair=None, buy_below=None, months=12):
@@ -1102,27 +1107,28 @@ def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
                        "Categories without data are left out of the overall grade.")
 
     with st.container(border=True, key="fvf-panel-share"):
-        s_text, s_btn = st.columns([3, 1.3], vertical_alignment="center")
+        s_text, s_btn = st.columns([2.2, 1.2], vertical_alignment="center")
         s_text.markdown("#### Share this result\nDownload a ready-made picture for WhatsApp, Instagram or "
                         "your status. It shows the verdict, the price meter and the report card.")
         try:
             png = share_card_png(d, r, card)
             fname = d["symbol"].split(".")[0].replace("&", "and") + "-fair-value.png"
-            s_btn.download_button("Download share picture", png, file_name=fname, mime="image/png",
+            s_btn.download_button("Download picture", png, file_name=fname, mime="image/png",
                                   type="primary", width="stretch", key="fvf-share-btn")
             with st.expander("Preview the picture"):
                 st.image(png, width=420)
         except Exception as e:
             s_btn.caption(f"The share picture could not be made: {e}")
 
-    m = st.columns(5)
+    m = st.columns(3)
     m[0].metric("Price", rs(r["price"]))
     m[1].metric("Fair value", rs(r["fair"]))
     m[2].metric("Buy below", rs(r["buy_below"]))
+    m2 = st.columns(2)
     up = (r["fair"] / r["price"] - 1) * 100 if r["fair"] and r["price"] else None
-    m[3].metric("Upside to fair value", pct(up, True))
+    m2[0].metric("Upside to fair value", pct(up, True))
     if d.get("hi52") and d.get("lo52") and r["price"]:
-        m[4].metric("52-week low / high", f"{d['lo52']:,.0f} / {d['hi52']:,.0f}",
+        m2[1].metric("52-week low / high", f"₹{d['lo52']:,.0f} / ₹{d['hi52']:,.0f}",
                     f"{(r['price'] / d['hi52'] - 1) * 100:.1f}% from high", delta_color="off")
 
     tab1, tab2, tab3, tab4 = st.tabs(["Verdict details", "Price chart", "Future price", "Financials"])
