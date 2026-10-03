@@ -517,12 +517,14 @@ def cli(argv):
 # Look and feel: palette, CSS, charts
 # ----------------------------------------------------------------------------
 
-INK, PAPER, CARD, LINE, MUTED = "#1B2559", "#F3F4F7", "#FFFFFF", "#DCE0E8", "#5B6478"
-NAVY, GOLD, GOLD_TEXT, GOLD_SOFT = "#0F1B3D", "#C9A962", "#8A6A2F", "#F4ECDC"
+INK, PAPER, CARD, LINE, MUTED = "#1D3B34", "#FBF9F4", "#FFFFFF", "#E6E1D5", "#5E6B66"
+EMERALD, GOLD, GOLD_TEXT, GOLD_SOFT = "#0F7A5C", "#C99A3E", "#8A6420", "#F7EEDA"
+# Palette from the owner's chart: Sukran (lagna lord) pearl/ivory base, Budhan (mahadasa) emerald brand,
+# Surya (next bhukti) gold accents. Dark navy/black left out on purpose.
 TONE = {"good": "#1F7A4D", "warn": "#A86400", "bad": "#B42318"}
 GRADE_COLOR = {"A": "#1F7A4D", "B": "#3E8E5E", "C": "#A86400", "D": "#C2410C", "F": "#B42318", "-": MUTED}
 FONT = "Source Sans 3, Segoe UI, sans-serif"
-SHADOW = "0 1px 2px rgba(15,27,61,.05), 0 10px 28px rgba(15,27,61,.06)"
+SHADOW = "0 1px 2px rgba(29,59,52,.05), 0 10px 28px rgba(29,59,52,.06)"
 
 LOGO_SVG = ('<svg class="fvf-logo" viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke="currentColor" '
             'stroke-width="2" stroke-linecap="round"><path d="M16 4v23M5 8h22M10 27h12M5 8 2 17M5 8l3 9M27 8l-3 9M27 8l3 9"/>'
@@ -537,22 +539,22 @@ h4 {{ font-weight: 700; }}
 .block-container {{ padding-top: 3.2rem; max-width: 1160px; }}
 
 /* Header: navy band with gold logo, tagline and the class contact row */
-.fvf-head {{ background: {NAVY}; border-radius: 20px; padding: 1.6rem 1.8rem 1.2rem; margin-bottom: 1.4rem;
-            border: 1px solid rgba(201,169,98,.35); box-shadow: {SHADOW}; }}
+.fvf-head {{ background: linear-gradient(135deg, #EEF7F2 0%, #FFFDF8 55%, #FBF1DC 100%); border-radius: 20px;
+            padding: 1.6rem 1.8rem 1.2rem; margin-bottom: 1.4rem; border: 1px solid rgba(201,154,62,.45); box-shadow: {SHADOW}; }}
 .fvf-brandrow {{ display: flex; align-items: center; gap: .7rem; }}
 .fvf-logo {{ width: 38px; height: 38px; color: {GOLD}; flex: 0 0 auto; }}
-.fvf-head .fvf-brand {{ font-size: 2.15rem; font-weight: 800; line-height: 1.05; margin: 0; color: #fff; }}
-.fvf-tag {{ color: #C5CCE0; margin: .65rem 0 1.15rem; font-size: 1.07rem; line-height: 1.5; max-width: 60ch; }}
+.fvf-head .fvf-brand {{ font-size: 2.15rem; font-weight: 800; line-height: 1.05; margin: 0; color: {EMERALD}; }}
+.fvf-tag {{ color: {MUTED}; margin: .65rem 0 1.15rem; font-size: 1.07rem; line-height: 1.5; max-width: 60ch; }}
 .fvf-contact {{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .7rem 1rem;
-               border-top: 1px solid rgba(201,169,98,.3); padding-top: 1rem; }}
-.fvf-contact p {{ margin: 0; color: #E6E9F2; font-size: 1rem; }}
-.fvf-contact b {{ color: {GOLD}; font-weight: 700; }}
+               border-top: 1px solid rgba(201,154,62,.35); padding-top: 1rem; }}
+.fvf-contact p {{ margin: 0; color: {INK}; font-size: 1rem; }}
+.fvf-contact b {{ color: {EMERALD}; font-weight: 700; }}
 .fvf-links {{ display: flex; gap: .55rem; flex-wrap: wrap; }}
 .fvf-links a {{ border-radius: 999px; padding: .45rem 1.1rem; font-weight: 700; text-decoration: none !important;
                white-space: nowrap; font-size: .95rem; }}
-.fvf-links .gold {{ background: {GOLD}; color: {NAVY} !important; }}
-.fvf-links .ghost {{ border: 1.5px solid {GOLD}; color: {GOLD} !important; }}
-.fvf-links a:focus-visible {{ outline: 3px solid #fff; outline-offset: 2px; }}
+.fvf-links .gold {{ background: {EMERALD}; color: #fff !important; }}
+.fvf-links .ghost {{ border: 1.5px solid {GOLD}; color: {GOLD_TEXT} !important; background: #fff; }}
+.fvf-links a:focus-visible {{ outline: 3px solid {GOLD}; outline-offset: 2px; }}
 
 /* Hero with the verdict stamp */
 .fvf-hero {{ display: flex; gap: 1.5rem; align-items: center; justify-content: space-between; flex-wrap: wrap;
@@ -561,7 +563,7 @@ h4 {{ font-weight: 700; }}
 .fvf-hero-text {{ flex: 1 1 360px; min-width: 0; }}
 .fvf-hero .fvf-name {{ font-size: 2rem; font-weight: 800; line-height: 1.12; margin: 0; }}
 .fvf-sub {{ color: {MUTED}; font-size: .95rem; margin: .35rem 0 .85rem; }}
-.fvf-reason {{ font-size: 1.06rem; line-height: 1.55; max-width: 62ch; margin: 0; color: #1A1F36; }}
+.fvf-reason {{ font-size: 1.06rem; line-height: 1.55; max-width: 62ch; margin: 0; color: #1D3B34; }}
 .fvf-stamp {{ flex: 0 1 auto; box-sizing: border-box; transform: rotate(-6deg); border: 4px double var(--c); color: var(--c);
              border-radius: 12px; padding: .6rem 1.15rem; text-align: center; font-family: 'Bricolage Grotesque', {FONT};
              font-weight: 800; font-size: 1.35rem; line-height: 1.15; max-width: 15rem;
@@ -574,16 +576,16 @@ h4 {{ font-weight: 700; }}
 /* Panels (Streamlit containers with key="fvf-panel-...") */
 [class*="st-key-fvf-panel"] {{ background: {CARD}; border-radius: 16px !important; box-shadow: {SHADOW};
                               border-color: {LINE} !important; }}
-.st-key-fvf-panel-share {{ background: {GOLD_SOFT} !important; border-color: rgba(201,169,98,.55) !important; }}
-.st-key-fvf-share-btn button {{ background: {NAVY} !important; border-color: {NAVY} !important; color: #fff !important;
+.st-key-fvf-panel-share {{ background: {GOLD_SOFT} !important; border-color: rgba(201,154,62,.55) !important; }}
+.st-key-fvf-share-btn button {{ background: {EMERALD} !important; border-color: {EMERALD} !important; color: #fff !important;
                                border-radius: 999px !important; font-weight: 700; }}
 
 /* Report card grades */
 .fvf-grades {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: .5rem; margin: .4rem 0 .6rem; }}
 .fvf-grade {{ border: 1px solid {LINE}; border-radius: 12px; padding: .5rem .65rem; display: flex; align-items: center;
-             gap: .55rem; background: {PAPER}; }}
+             gap: .55rem; background: #FDFBF6; }}
 .fvf-grade b {{ font-family: 'Bricolage Grotesque', {FONT}; font-size: 1.55rem; color: var(--c); min-width: 1.2ch; }}
-.fvf-grade span {{ font-size: .86rem; color: #1A1F36; line-height: 1.2; }}
+.fvf-grade span {{ font-size: .86rem; color: #1D3B34; line-height: 1.2; }}
 .fvf-grade em {{ display: block; font-style: normal; color: {MUTED}; font-size: .78rem; }}
 
 /* Metrics, tabs, sidebar */
@@ -644,7 +646,7 @@ def grades_html(card):
 
 def _base_layout(fig, height):
     fig.update_layout(height=height, margin=dict(l=20, r=20, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)",
-                      plot_bgcolor="rgba(0,0,0,0)", font=dict(family=FONT, color="#1A1F36", size=13))
+                      plot_bgcolor="rgba(0,0,0,0)", font=dict(family=FONT, color="#1D3B34", size=13))
     return fig
 
 
@@ -682,8 +684,8 @@ def radar_fig(card):
         return None
     names = [c["name"] for c in cats] + [cats[0]["name"]]
     vals = [c["score"] for c in cats] + [cats[0]["score"]]
-    fig = go.Figure(go.Scatterpolar(r=vals, theta=names, fill="toself", fillcolor="rgba(27,37,89,0.18)",
-                                    line=dict(color=INK, width=2), hovertemplate="%{theta}: %{r}/100<extra></extra>"))
+    fig = go.Figure(go.Scatterpolar(r=vals, theta=names, fill="toself", fillcolor="rgba(15,122,92,0.16)",
+                                    line=dict(color=EMERALD, width=2), hovertemplate="%{theta}: %{r}/100<extra></extra>"))
     fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)",
                                  radialaxis=dict(range=[0, 100], tickvals=[25, 50, 75, 100], showticklabels=False,
                                                  gridcolor=LINE, linecolor=LINE),
@@ -786,9 +788,9 @@ def _wrap(draw, text, font, max_w, max_lines=2):
     return lines
 
 
-CARD_THEME = dict(bg="#0A1230", card="#111C42", line="#26335F", gold="#C9A962", text="#FFFFFF", muted="#A3ADC8",
-                  good="#4CC38A", warn="#F0B44C", bad="#FF6B5E",
-                  arc_good="#2E8A63", arc_warn="#B8892F", arc_bad="#B4473F")
+CARD_THEME = dict(bg="#EFE8D8", card="#FFFDF8", line="#E6DDCA", gold="#B8862F", brand="#0F7A5C", text="#1D3B34",
+                  muted="#6B746F", good="#1F7A4D", warn="#A86400", bad="#B42318",
+                  arc_good="#8DCBA8", arc_warn="#EBCB82", arc_bad="#E9A69C")
 
 
 def _scale_mark(dr, cx, cy, s, col):
@@ -813,7 +815,7 @@ def share_card_png(d: dict, r: dict, card: dict, today: str | None = None) -> by
     W, H, PAD = 1080, 1350, 84
     img = Image.new("RGBA", (W, H), _hex(C["bg"]))
     dr = ImageDraw.Draw(img)
-    dr.rounded_rectangle((40, 40, W - 40, H - 40), radius=34, fill=_hex(C["card"]), outline=_hex(C["gold"], 150), width=2)
+    dr.rounded_rectangle((40, 40, W - 40, H - 40), radius=34, fill=_hex(C["card"]), outline=_hex(C["gold"], 170), width=3)
     white, muted, gold = _hex(C["text"]), _hex(C["muted"]), _hex(C["gold"])
     tones = {"good": _hex(C["good"]), "warn": _hex(C["warn"]), "bad": _hex(C["bad"])}
     grade_tone = {"A": "good", "B": "good", "C": "warn", "D": "bad", "F": "bad"}
@@ -826,7 +828,7 @@ def share_card_png(d: dict, r: dict, card: dict, today: str | None = None) -> by
         except Exception:
             today = datetime.date.today().strftime("%d %b %Y")
     _scale_mark(dr, PAD + 22, 108, 22, gold)
-    dr.text((PAD + 64, 88), "Fair Value Finder", font=_font("display", 34, 700), fill=gold)
+    dr.text((PAD + 64, 88), "Fair Value Finder", font=_font("display", 34, 700), fill=_hex(C["brand"]))
     fd = _font("body", 28, 400)
     dr.text((W - PAD - dr.textlength(today, font=fd), 94), today, font=fd, fill=muted)
     dr.line((PAD, 152, W - PAD, 152), fill=_hex(C["line"]), width=2)
@@ -853,7 +855,7 @@ def share_card_png(d: dict, r: dict, card: dict, today: str | None = None) -> by
     sw, sh = int(bbox[2] - bbox[0]) + 76, int(bbox[3] - bbox[1]) + 52
     stamp = Image.new("RGBA", (sw + 20, sh + 20), (0, 0, 0, 0))
     sd = ImageDraw.Draw(stamp)
-    sd.rounded_rectangle((10, 10, sw + 10, sh + 10), radius=18, outline=tone, width=7, fill=tone[:3] + (28,))
+    sd.rounded_rectangle((10, 10, sw + 10, sh + 10), radius=18, outline=tone, width=7, fill=tone[:3] + (18,))
     sd.rounded_rectangle((22, 22, sw - 2, sh - 2), radius=12, outline=tone, width=3)
     sd.multiline_text(((sw + 20) / 2, (sh + 20) / 2), verdict, font=fs, fill=tone, anchor="mm", align="center", spacing=6)
     stamp = stamp.rotate(6, resample=Image.BICUBIC, expand=True)
@@ -927,10 +929,10 @@ def share_card_png(d: dict, r: dict, card: dict, today: str | None = None) -> by
 
     # Footer: gold contact band, site link, disclaimer
     dr.line((PAD, fy, W - PAD, fy), fill=_hex(C["line"]), width=2)
-    dr.rounded_rectangle((PAD, fy + 20, W - PAD, fy + 92), radius=16, fill=gold)
+    dr.rounded_rectangle((PAD, fy + 20, W - PAD, fy + 92), radius=16, fill=_hex(C["brand"]))
     ctext = f"{CONTACT_LINE}. Call {CONTACT_DISPLAY}"
     dr.text((W / 2, fy + 56), ctext, font=_fit(dr, ctext, "body", 700, W - 2 * PAD - 40, 32),
-            fill=_hex(C["card"]), anchor="mm")
+            fill=(255, 255, 255, 255), anchor="mm")
     dr.text((W / 2, fy + 106), f"Check any NSE stock for free at {SITE_URL}", font=_font("body", 29, 600),
             fill=white, anchor="ma")
     dr.text((W / 2, fy + 146), "For learning only. This is not investment advice.", font=_font("body", 24, 400),
