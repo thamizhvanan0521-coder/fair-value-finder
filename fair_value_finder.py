@@ -112,9 +112,9 @@ TEXT = {
     # single stock
     "sym_label": ("NSE symbol", "NSE குறியீடு"),
     "sym_ph": ("e.g. TCS, SBIN, TATASTEEL, HDFCBANK", "எ.கா. TCS, SBIN, TATASTEEL, HDFCBANK"),
-    "analyse": ("Analyse", "பகுப்பாய்வு"),
+    "analyse": ("Analyse", "தேடு"),
     "type_hint": ("Type an NSE symbol, such as TCS or SBIN, and press Analyse.",
-                  "TCS அல்லது SBIN போன்ற NSE குறியீட்டைத் தட்டச்சு செய்து, பகுப்பாய்வு அழுத்துங்கள்."),
+                  "TCS அல்லது SBIN போன்ற NSE குறியீட்டைத் தட்டச்சு செய்து, தேடு அழுத்துங்கள்."),
     "fetching": ("Fetching {s} from Yahoo Finance…", "Yahoo Finance-இல் இருந்து {s} பெறப்படுகிறது…"),
     "load_err": ("Could not load {s}: {e} If Yahoo is busy, wait a minute and try again.",
                  "{s}-ஐ ஏற்ற முடியவில்லை: {e} Yahoo பிஸியாக இருந்தால், ஒரு நிமிடம் கழித்து மீண்டும் முயலுங்கள்."),
@@ -944,6 +944,7 @@ h4 {{ font-weight: 700; }}
 .fvf-pick-grade b {{ color: var(--c); font-size: 1rem; }}
 
 /* Compare table */
+[class*="st-key-lang_choice"] [role="radiogroup"] {{ justify-content: flex-end; flex-wrap: nowrap; gap: .8rem; }}
 .fvf-cmp-wrap {{ overflow-x: auto; background: {CARD}; border: 1px solid {LINE}; border-radius: 16px; box-shadow: {SHADOW}; }}
 .fvf-cmp {{ width: 100%; border-collapse: collapse; font-size: .95rem; }}
 .fvf-cmp th, .fvf-cmp td {{ padding: .6rem .9rem; border-bottom: 1px solid {LINE}; text-align: left; vertical-align: middle; }}
@@ -1462,7 +1463,7 @@ def app():
     st.markdown(CSS, unsafe_allow_html=True)
 
     # Language switch (top right, visible on phones too, where the sidebar is hidden)
-    _, lang_col = st.columns([3, 1.2])
+    _, lang_col = st.columns([1.4, 1])
     choice = lang_col.radio("Language / மொழி", ["English", "தமிழ்"], horizontal=True, key="lang_choice",
                             label_visibility="collapsed")
     st.session_state["lang_code"] = "ta" if choice == "தமிழ்" else "en"
