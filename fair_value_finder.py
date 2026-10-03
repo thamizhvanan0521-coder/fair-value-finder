@@ -233,6 +233,55 @@ def project(r: dict, years=(1, 3, 5)) -> list:
     return out
 
 
+def _scale(x, bad, good):
+    """Map x linearly so that `bad` -> 0 and `good` -> 100 (works when good < bad too)."""
+    if x is None:
+        return None
+    return clip((x - bad) / (good - bad) * 100, 0, 100)
+
+
+def grade(score):
+    if score is None:
+        return "-"
+    return "A" if score >= 80 else "B" if score >= 65 else "C" if score >= 50 else "D" if score >= 35 else "F"
+
+
+def report_card(r: dict, d: dict) -> dict:
+    """Five 0-100 category scores + overall, each with a letter grade.
+    Categories with no data are left out of the overall (never counted as zero)."""
+    def avg(*xs):
+        xs = [x for x in xs if x is not None]
+        return sum(xs) / len(xs) if xs else None
+
+    price, fair = r.get("price"), r.get("fair")
+    upside = (fair / price - 1) * 100 if (price and fair) else None
+    lender = r.get("lender")
+    checks = {c["check"]: c["value"] for c in r.get("checks", [])}
+    profitable = checks.get("Profitable every year")
+
+    valuation = _scale(upside, -40, 40)                         # 40% above fair -> 0, 40% below -> 100
+    growth = avg(_scale(r.get("rev_c"), 0, 20), _scale(r.get("eps_c"), 0, 25))
+    if lender:
+        profit = avg(_scale(r.get("roe"), 5, 20), _scale(d.get("net_margin"), 5, 30))
+        health = avg(_scale(d.get("roa"), 0.3, 2.0),
+                     None if profitable is None else (100 if profitable else 0))
+    else:
+        profit = avg(_scale(r.get("roe"), 5, 25), _scale(d.get("net_margin"), 0, 20))
+        health = avg(_scale(d.get("de"), 1.5, 0.0), _scale(d.get("current_ratio"), 0.8, 2.0))
+    fcf_conv = checks.get("FCF / net profit")
+    consistency = avg(None if profitable is None else (100 if profitable else 0),
+                      _scale(fcf_conv, 30, 100) if not lender else None)
+
+    cats = [("Valuation", valuation), ("Growth", growth), ("Profitability", profit),
+            ("Financial health", health), ("Consistency", consistency)]
+    overall = avg(*(s for _, s in cats))
+    return {
+        "categories": [{"name": n, "score": None if s is None else round(s), "grade": grade(s)} for n, s in cats],
+        "overall": None if overall is None else round(overall),
+        "overall_grade": grade(overall),
+    }
+
+
 # ----------------------------------------------------------------------------
 # Data from Yahoo Finance
 # ----------------------------------------------------------------------------
@@ -342,10 +391,15 @@ def fetch(symbol: str) -> dict:
     lo52 = lo52 or _num(info.get("fiftyTwoWeekLow"))
 
     price_series = None
+    ohlc = []
     if ph is not None and not ph.empty:
         c = ph["Close"].dropna()
         idx = c.index.tz_localize(None) if getattr(c.index, "tz", None) is not None else c.index
         price_series = list(zip([str(x)[:10] for x in idx], [float(v) for v in c.values]))
+        k = ph[["Open", "High", "Low", "Close"]].dropna()
+        kidx = k.index.tz_localize(None) if getattr(k.index, "tz", None) is not None else k.index
+        ohlc = [(str(dt)[:10], float(o), float(h), float(lo), float(cl))
+                for dt, (o, h, lo, cl) in zip(kidx, k.values)]
 
     return dict(
         symbol=ysym,
@@ -370,6 +424,7 @@ def fetch(symbol: str) -> dict:
         rec=info.get("recommendationKey") or "",
         hist_pe=_hist_pe(eps_s, ph),
         prices=price_series or [],
+        ohlc=ohlc,
         hist=dict(
             years=[str(x)[:4] for x in rev_s.index] if rev_s is not None else [],
             revenue=_vals(rev_s),
@@ -454,6 +509,163 @@ def cli(argv):
 
 
 # ----------------------------------------------------------------------------
+# Look and feel: palette, CSS, charts
+# ----------------------------------------------------------------------------
+
+INK, PAPER, CARD, LINE, MUTED = "#1B2559", "#F1F3F6", "#FFFFFF", "#D5DAE3", "#5B6478"
+TONE = {"good": "#1F7A4D", "warn": "#B26B00", "bad": "#B42318"}
+GRADE_COLOR = {"A": "#1F7A4D", "B": "#3E8E5E", "C": "#B26B00", "D": "#C2410C", "F": "#B42318", "-": MUTED}
+FONT = "Source Sans 3, Segoe UI, sans-serif"
+
+CSS = f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Sans+3:wght@400;600&display=swap');
+html, body, [class*="st-"], .stMarkdown, p, li, label {{ font-family: {FONT}; }}
+h1, h2, h3, h4, .fvf-name, .fvf-brand {{ font-family: 'Bricolage Grotesque', {FONT}; color: {INK}; letter-spacing: -0.01em; }}
+.block-container {{ padding-top: 2rem; max-width: 1180px; }}
+.fvf-brand {{ font-size: 2.1rem; font-weight: 700; line-height: 1.1; margin: 0; }}
+.fvf-tag {{ color: {MUTED}; margin: .25rem 0 1rem; font-size: 1rem; }}
+.fvf-hero {{ display: flex; gap: 1.5rem; align-items: center; justify-content: space-between; flex-wrap: wrap;
+            background: {CARD}; border: 1px solid {LINE}; border-radius: 14px; padding: 1.4rem 1.6rem; margin: .5rem 0 1rem; }}
+.fvf-hero-text {{ flex: 1 1 360px; min-width: 0; }}
+.fvf-name {{ font-size: 1.9rem; font-weight: 700; line-height: 1.15; margin: 0; }}
+.fvf-sub {{ color: {MUTED}; font-size: .95rem; margin: .3rem 0 .8rem; }}
+.fvf-reason {{ font-size: 1.05rem; line-height: 1.5; max-width: 62ch; margin: 0; color: #1A1F36; }}
+.fvf-stamp {{ flex: 0 0 auto; transform: rotate(-6deg); border: 4px double var(--c); color: var(--c);
+             border-radius: 10px; padding: .55rem 1.1rem; text-align: center; font-family: 'Bricolage Grotesque', {FONT};
+             font-weight: 700; font-size: 1.35rem; line-height: 1.15; max-width: 15rem; background: {CARD};
+             animation: fvf-stamp .45s cubic-bezier(.2,1.6,.4,1) both; }}
+.fvf-stamp small {{ display: block; font-family: {FONT}; font-weight: 600; font-size: .8rem; margin-top: .25rem; opacity: .85; }}
+@keyframes fvf-stamp {{ from {{ transform: rotate(-6deg) scale(1.8); opacity: 0; }} to {{ transform: rotate(-6deg) scale(1); opacity: 1; }} }}
+@media (prefers-reduced-motion: reduce) {{ .fvf-stamp {{ animation: none; }} }}
+.fvf-panel {{ background: {CARD}; border: 1px solid {LINE}; border-radius: 14px; padding: 1rem 1.1rem .4rem; }}
+.fvf-panel h4 {{ margin: 0 0 .2rem; font-size: 1.1rem; }}
+.fvf-panel p {{ color: {MUTED}; margin: 0; font-size: .9rem; }}
+.fvf-grades {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: .5rem; margin: .4rem 0 .6rem; }}
+.fvf-grade {{ border: 1px solid {LINE}; border-radius: 10px; padding: .45rem .6rem; display: flex; align-items: center; gap: .55rem; background: {PAPER}; }}
+.fvf-grade b {{ font-family: 'Bricolage Grotesque', {FONT}; font-size: 1.5rem; color: var(--c); min-width: 1.2ch; }}
+.fvf-grade span {{ font-size: .85rem; color: #1A1F36; line-height: 1.2; }}
+.fvf-grade em {{ display: block; font-style: normal; color: {MUTED}; font-size: .78rem; }}
+[data-testid="stMetric"] {{ background: {CARD}; border: 1px solid {LINE}; border-radius: 12px; padding: .7rem .9rem; }}
+[data-testid="stMetricLabel"] p {{ color: {MUTED}; }}
+[data-testid="stMetricValue"] {{ font-family: 'Bricolage Grotesque', {FONT}; color: {INK}; }}
+@media (max-width: 640px) {{
+  .fvf-brand {{ font-size: 1.6rem; }} .fvf-name {{ font-size: 1.45rem; }}
+  .fvf-hero {{ padding: 1rem; }} .fvf-stamp {{ font-size: 1.1rem; }}
+}}
+</style>
+"""
+
+
+def _esc(s):
+    import html
+    return html.escape(str(s or ""))
+
+
+def hero_html(d, r):
+    c = TONE[r["tone"]]
+    sub = " | ".join(x for x in (d["symbol"], d.get("sector"), d.get("industry")) if x)
+    if r["lender"]:
+        sub += " | valued as a bank/NBFC"
+    q = "" if r["quality"] is None else f"<small>Quality {r['quality']}%</small>"
+    return (f'<div class="fvf-hero"><div class="fvf-hero-text"><p class="fvf-name">{_esc(d["name"])}</p>'
+            f'<p class="fvf-sub">{_esc(sub)}</p><p class="fvf-reason">{_esc(r["reason"])}</p></div>'
+            f'<div class="fvf-stamp" style="--c:{c}" role="img" aria-label="Verdict: {_esc(r["verdict"])}">'
+            f'{_esc(r["verdict"])}{q}</div></div>')
+
+
+def grades_html(card):
+    cells = "".join(
+        f'<div class="fvf-grade" style="--c:{GRADE_COLOR[g["grade"]]}"><b>{g["grade"]}</b>'
+        f'<span>{g["name"]}<em>{"no data" if g["score"] is None else str(g["score"]) + " / 100"}</em></span></div>'
+        for g in card["categories"])
+    return f'<div class="fvf-grades">{cells}</div>'
+
+
+def _base_layout(fig, height):
+    fig.update_layout(height=height, margin=dict(l=20, r=20, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)",
+                      plot_bgcolor="rgba(0,0,0,0)", font=dict(family=FONT, color="#1A1F36", size=13))
+    return fig
+
+
+def gauge_fig(r):
+    """Speedometer: where today's price sits against buy-below / fair value."""
+    import plotly.graph_objects as go
+    price, fair, bb = r["price"], r["fair"], r["buy_below"]
+    lo = max(0.0, min(fair * 0.5, price * 0.9))
+    hi = max(fair * 1.5, price * 1.1)
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number+delta", value=price,
+        number=dict(prefix="Rs", valueformat=",.0f", font=dict(size=34, family="Bricolage Grotesque, " + FONT, color=INK)),
+        delta=dict(reference=fair, relative=True, valueformat="+.0%", suffix=" vs fair",
+                   increasing=dict(color=TONE["bad"]), decreasing=dict(color=TONE["good"])),
+        gauge=dict(
+            axis=dict(range=[lo, hi], tickprefix="Rs", tickformat=",.0f", tickcolor=MUTED, nticks=6),
+            bar=dict(color=INK, thickness=0.22),
+            bgcolor=CARD, borderwidth=0,
+            steps=[dict(range=[lo, bb], color="#D7EBDF"),
+                   dict(range=[bb, fair], color="#F5E6C8"),
+                   dict(range=[fair, hi], color="#F4D5D2")],
+            threshold=dict(line=dict(color=INK, width=3), thickness=0.85, value=fair),
+        ),
+    ))
+    return _base_layout(fig, 260)
+
+
+def radar_fig(card):
+    import plotly.graph_objects as go
+    cats = [c for c in card["categories"] if c["score"] is not None]
+    if len(cats) < 3:
+        return None
+    names = [c["name"] for c in cats] + [cats[0]["name"]]
+    vals = [c["score"] for c in cats] + [cats[0]["score"]]
+    fig = go.Figure(go.Scatterpolar(r=vals, theta=names, fill="toself", fillcolor="rgba(27,37,89,0.18)",
+                                    line=dict(color=INK, width=2), hovertemplate="%{theta}: %{r}/100<extra></extra>"))
+    fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)",
+                                 radialaxis=dict(range=[0, 100], tickvals=[25, 50, 75, 100], showticklabels=False,
+                                                 gridcolor=LINE, linecolor=LINE),
+                                 angularaxis=dict(gridcolor=LINE, linecolor=LINE)),
+                      showlegend=False)
+    return _base_layout(fig, 260)
+
+
+def candle_fig(ohlc, fair=None, buy_below=None, months=12):
+    """Candlestick with 200-day average, today's fair value line and shaded buy zone."""
+    import pandas as pd
+    import plotly.graph_objects as go
+    df = pd.DataFrame(ohlc, columns=["Date", "Open", "High", "Low", "Close"])
+    df["Date"] = pd.to_datetime(df["Date"])
+    df["DMA200"] = df["Close"].rolling(200).mean()           # computed on full history, then sliced
+    df = df[df["Date"] >= df["Date"].iloc[-1] - pd.DateOffset(months=months)]
+    fig = go.Figure()
+    fig.add_trace(go.Candlestick(x=df["Date"], open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
+                                 name="Price", increasing=dict(line=dict(color=TONE["good"]), fillcolor=TONE["good"]),
+                                 decreasing=dict(line=dict(color=TONE["bad"]), fillcolor=TONE["bad"])))
+    fig.add_trace(go.Scatter(x=df["Date"], y=df["DMA200"], name="200-day average", mode="lines",
+                             line=dict(color=MUTED, width=1.5, dash="dot")))
+    if fair and buy_below:
+        floor = min(float(df["Low"].min()), buy_below) * 0.95
+        fig.add_hrect(y0=floor, y1=buy_below, fillcolor=TONE["good"], opacity=0.08, line_width=0,
+                      annotation_text="Buy zone", annotation_position="bottom left",
+                      annotation_font=dict(color=TONE["good"], size=12))
+        fig.add_hline(y=fair, line=dict(color=INK, width=2, dash="dash"),
+                      annotation_text=f"Fair value Rs{fair:,.0f}", annotation_position="top left",
+                      annotation_font=dict(color=INK, size=12))
+        fig.add_hline(y=buy_below, line=dict(color=TONE["good"], width=1.5))
+    ys = list(df["Low"]) + list(df["High"]) + ([fair, buy_below] if fair else [])
+    pad = (max(ys) - min(ys)) * 0.08
+    fig.update_layout(
+        xaxis=dict(rangeslider=dict(visible=False), rangebreaks=[dict(bounds=["sat", "mon"])], gridcolor=LINE),
+        yaxis=dict(range=[min(ys) - pad, max(ys) + pad], tickprefix="Rs", tickformat=",.0f", gridcolor=LINE),
+        legend=dict(orientation="h", y=-0.12, x=0), hovermode="x unified",
+    )
+    return _base_layout(fig, 460)
+
+
+PLOTLY_CFG = {"displayModeBar": False, "responsive": True}
+
+
+# ----------------------------------------------------------------------------
 # Streamlit web app
 # ----------------------------------------------------------------------------
 
@@ -475,9 +687,11 @@ def app():
     import pandas as pd
     import streamlit as st
 
-    st.set_page_config(page_title="Fair Value Finder", layout="wide")
-    st.title("Fair Value Finder")
-    st.caption("NSE fundamentals from Yahoo Finance | fair value four ways | buy / near fair / no-buy verdict | future price scenarios")
+    st.set_page_config(page_title="Fair Value Finder", page_icon="⚖️", layout="wide")
+    st.markdown(CSS, unsafe_allow_html=True)
+    st.markdown('<p class="fvf-brand">Fair Value Finder</p>'
+                '<p class="fvf-tag">Type any NSE stock. See what it is really worth, how strong the business is, '
+                'and whether today\'s price is a bargain.</p>', unsafe_allow_html=True)
 
     with st.sidebar:
         st.header("Settings")
@@ -596,10 +810,29 @@ def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
     if any(overrides.values()):
         st.info("Using your corrected numbers from the sidebar.")
 
-    st.subheader(f"{d['name']}  |  {d['symbol']}")
-    st.caption(f"{d['sector']} | {d['industry']}" + (" | valued as a bank/NBFC" if r["lender"] else ""))
-    color = {"good": "green", "warn": "orange", "bad": "red"}[r["tone"]]
-    st.markdown(f"### :{color}[{r['verdict']}]  \nQuality score **{r['quality']}%** | {r['reason']}")
+    st.markdown(hero_html(d, r), unsafe_allow_html=True)
+
+    card = report_card(r, d)
+    g_col, rc_col = st.columns([1, 1.25], gap="medium")
+    with g_col:
+        with st.container(border=True):
+            st.markdown("#### Price vs fair value")
+            if r["fair"] and r["price"]:
+                st.plotly_chart(gauge_fig(r), config=PLOTLY_CFG, width="stretch")
+                st.caption("Green: buy zone (below your margin of safety). Amber: under fair value. "
+                           "Red: above fair value. The dark tick is fair value.")
+            else:
+                st.info("No fair value for this stock, so the meter is hidden.")
+    with rc_col:
+        with st.container(border=True):
+            st.markdown(f"#### Report card: **{card['overall_grade']}**"
+                        + ("" if card["overall"] is None else f"  ({card['overall']}/100)"))
+            st.markdown(grades_html(card), unsafe_allow_html=True)
+            rf = radar_fig(card)
+            if rf is not None:
+                st.plotly_chart(rf, config=PLOTLY_CFG, width="stretch")
+            st.caption("Scores compare this company with simple benchmarks, not with other companies. "
+                       "Categories without data are left out of the overall grade.")
 
     m = st.columns(5)
     m[0].metric("Price", rs(r["price"]))
@@ -629,7 +862,15 @@ def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
 
     with tab2:
         prices = d.get("prices") or []
-        if prices:
+        ohlc = d.get("ohlc") or []
+        spans = {"6 months": 6, "1 year": 12, "3 years": 36, "5 years": 60}
+        if ohlc:
+            span = st.radio("Period", list(spans), horizontal=True, index=1)
+            st.plotly_chart(candle_fig(ohlc, r["fair"], r["buy_below"], spans[span]),
+                            config=PLOTLY_CFG, width="stretch")
+            st.caption("Dashed line: today's fair value. Shaded green band: the buy zone. Dotted line: "
+                       "200-day average price. Candles inside the green band were bargains by today's estimate.")
+        elif prices:
             span = st.radio("Period", ["1 year", "5 years"], horizontal=True, index=0)
             pts = prices[-252:] if span == "1 year" else prices
             df = pd.DataFrame(pts, columns=["Date", "Price"]).set_index("Date")
@@ -637,8 +878,6 @@ def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
                 df["Fair value"] = r["fair"]
                 df["Buy below"] = r["buy_below"]
             st.line_chart(df)
-            st.caption("Flat lines show today's fair value and buy-below price. When the price line is under "
-                       "'Buy below', the stock was in the buy zone by today's estimate.")
         else:
             st.warning("Price history not available for this stock.")
 
