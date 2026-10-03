@@ -664,6 +664,184 @@ def candle_fig(ohlc, fair=None, buy_below=None, months=12):
 
 PLOTLY_CFG = {"displayModeBar": False, "responsive": True}
 
+SITE_URL = "fair-value-finder.streamlit.app"
+
+
+# ----------------------------------------------------------------------------
+# Share card: a 1080x1350 PNG for WhatsApp / Instagram (drawn with Pillow)
+# ----------------------------------------------------------------------------
+
+def _font(kind, size, weight=400):
+    import os
+    from PIL import ImageFont
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(here, "fonts", "BricolageGrotesque.ttf" if kind == "display" else "SourceSans3.ttf")
+    try:
+        f = ImageFont.truetype(path, size)
+        # axes: Bricolage = (opsz, wght, wdth); Source Sans 3 = (wght,)
+        f.set_variation_by_axes([min(96, max(12, size)), weight, 100] if kind == "display" else [weight])
+        return f
+    except Exception:
+        return ImageFont.load_default(size)
+
+
+def _hex(c, a=255):
+    c = c.lstrip("#")
+    return tuple(int(c[i:i + 2], 16) for i in (0, 2, 4)) + (a,)
+
+
+def _fit(draw, text, kind, weight, max_w, start, minimum=24):
+    size = start
+    while size > minimum:
+        f = _font(kind, size, weight)
+        if draw.textlength(text, font=f) <= max_w:
+            return f
+        size -= 2
+    return _font(kind, minimum, weight)
+
+
+def _wrap(draw, text, font, max_w, max_lines=2):
+    words, lines, cur = text.split(), [], ""
+    for w in words:
+        t = (cur + " " + w).strip()
+        if draw.textlength(t, font=font) <= max_w or not cur:
+            cur = t
+        else:
+            lines.append(cur)
+            cur = w
+    lines.append(cur)
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        while draw.textlength(lines[-1] + "...", font=font) > max_w and " " in lines[-1]:
+            lines[-1] = lines[-1].rsplit(" ", 1)[0]
+        lines[-1] += "..."
+    return lines
+
+
+def share_card_png(d: dict, r: dict, card: dict, today: str | None = None) -> bytes:
+    import datetime
+    import io
+    import math as m
+    from PIL import Image, ImageDraw
+
+    W, H, PAD = 1080, 1350, 84
+    img = Image.new("RGBA", (W, H), _hex(PAPER))
+    dr = ImageDraw.Draw(img)
+    dr.rounded_rectangle((44, 44, W - 44, H - 44), radius=36, fill=_hex(CARD), outline=_hex(LINE), width=3)
+    ink, muted = _hex(INK), _hex(MUTED)
+
+    # Header: brand + date
+    if not today:
+        try:
+            from zoneinfo import ZoneInfo
+            today = datetime.datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y")
+        except Exception:
+            today = datetime.date.today().strftime("%d %b %Y")
+    dr.text((PAD, 86), "Fair Value Finder", font=_font("display", 36, 700), fill=ink)
+    fd = _font("body", 30, 400)
+    dr.text((W - PAD - dr.textlength(today, font=fd), 92), today, font=fd, fill=muted)
+    dr.line((PAD, 152, W - PAD, 152), fill=_hex(LINE), width=2)
+
+    # Company name (up to 2 lines) + symbol / sector
+    y = 180
+    fname = _font("display", 62, 700)
+    for line in _wrap(dr, d["name"], fname, W - 2 * PAD):
+        dr.text((PAD, y), line, font=fname, fill=ink)
+        y += 70
+    sub = " | ".join(x for x in (d["symbol"].replace(".NS", "").replace(".BO", ""), d.get("sector")) if x)
+    dr.text((PAD, y + 4), sub, font=_font("body", 32, 600), fill=muted)
+    top = y + 60                                       # first free pixel row below the header block
+
+    price, fair, bb = r["price"], r["fair"], r["buy_below"]
+    tone = _hex(TONE[r["tone"]])
+    has_gauge = bool(price and fair)
+
+    # Build the stamp first so its height is known before laying out the page
+    verdict = r["verdict"].replace(" - ", "\n")
+    fs = _font("display", 46, 800)
+    tmp = ImageDraw.Draw(Image.new("RGBA", (10, 10)))
+    bbox = tmp.multiline_textbbox((0, 0), verdict, font=fs, align="center", spacing=6)
+    sw, sh = int(bbox[2] - bbox[0]) + 76, int(bbox[3] - bbox[1]) + 52
+    stamp = Image.new("RGBA", (sw + 20, sh + 20), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(stamp)
+    sd.rounded_rectangle((10, 10, sw + 10, sh + 10), radius=18, outline=tone, width=7, fill=_hex(CARD))
+    sd.rounded_rectangle((22, 22, sw - 2, sh - 2), radius=12, outline=tone, width=3)
+    sd.multiline_text(((sw + 20) / 2, (sh + 20) / 2), verdict, font=fs, fill=tone, anchor="mm", align="center", spacing=6)
+    stamp = stamp.rotate(6, resample=Image.BICUBIC, expand=True)
+
+    # Vertical budget: label gap + gauge + price block + stamp + stats must fit above the footer
+    fy = H - 44 - 112                                  # footer rule
+    R, thick = 250, 46
+    label_gap, price_block, stats_h, gaps = 64, 150, 104, 3 * 22
+    need = lambda R: (label_gap + R if has_gauge else 0) + price_block + stamp.height + stats_h + gaps
+    while R > 170 and top + need(R) > fy - 16:
+        R -= 10
+    spare = max(0, (fy - 16) - (top + need(R)))
+    y = top + spare / 2                                # centre the block in whatever room is left
+    cx = W // 2
+
+    if has_gauge:
+        cy = y + label_gap + R
+        lo = max(0.0, min(fair * 0.5, price * 0.9))
+        hi = max(fair * 1.5, price * 1.1)
+        frac = lambda v: clip((v - lo) / (hi - lo), 0, 1)
+        ang = lambda v: 180 + frac(v) * 180          # PIL: 0 deg = 3 o'clock, clockwise; top half = 180..360
+        box = (cx - R, cy - R, cx + R, cy + R)
+        for a0, a1, col in ((lo, bb, "#9FD1B3"), (bb, fair, "#EBC77F"), (fair, hi, "#E8A49D")):
+            if a1 > a0:
+                dr.arc(box, ang(a0), ang(a1), fill=_hex(col), width=thick)
+        # fair value tick + label just outside the arc
+        t = m.radians(ang(fair))
+        dr.line((cx + (R - thick - 12) * m.cos(t), cy + (R - thick - 12) * m.sin(t),
+                 cx + (R + 12) * m.cos(t), cy + (R + 12) * m.sin(t)), fill=ink, width=6)
+        lx, ly = cx + (R + 26) * m.cos(t), cy + (R + 26) * m.sin(t)
+        dr.text((lx, ly), f"Fair Rs{fair:,.0f}", font=_font("body", 26, 600), fill=ink,
+                anchor="md" if abs(m.cos(t)) < 0.35 else ("rd" if m.cos(t) < 0 else "ld"))
+        # needle
+        n = m.radians(ang(price))
+        dr.line((cx, cy, cx + (R - thick - 26) * m.cos(n), cy + (R - thick - 26) * m.sin(n)), fill=ink, width=11)
+        dr.ellipse((cx - 20, cy - 20, cx + 20, cy + 20), fill=ink)
+        fz = _font("body", 26, 600)
+        dr.text((cx - R - 14, cy - 6), "Cheap", font=fz, fill=_hex(TONE["good"]), anchor="rd")
+        dr.text((cx + R + 14, cy - 6), "Costly", font=fz, fill=_hex(TONE["bad"]), anchor="ld")
+        y = cy + 22
+    # price + % vs fair value
+    dr.text((cx, y), f"Rs{price:,.0f}" if price else "-", font=_font("display", 76, 700), fill=ink, anchor="ma")
+    if has_gauge:
+        diff = (price / fair - 1) * 100
+        dtxt = f"{abs(diff):.0f}% {'above' if diff > 0 else 'below'} fair value"
+        dcol = _hex(TONE["bad"] if diff > 0 else TONE["good"])
+    else:
+        dtxt, dcol = "Fair value not available", muted
+    dr.text((cx, y + 92), dtxt, font=_font("body", 34, 600), fill=dcol, anchor="ma")
+    y += price_block + 22
+
+    # Verdict stamp
+    img.alpha_composite(stamp, (int(cx - stamp.width / 2), int(y)))
+    y += stamp.height + 22
+
+    # Stats row: fair value | buy below | report card
+    cols = [("Fair value", "-" if not fair else f"Rs{fair:,.0f}", ink),
+            ("Buy below", "-" if not bb else f"Rs{bb:,.0f}", _hex(TONE["good"])),
+            ("Report card", card["overall_grade"] + ("" if card["overall"] is None else f"  {card['overall']}/100"),
+             _hex(GRADE_COLOR[card["overall_grade"]]))]
+    cw = (W - 2 * PAD) / 3
+    for i, (lab, val, col) in enumerate(cols):
+        x = PAD + cw * i + cw / 2
+        dr.text((x, y), lab, font=_font("body", 28, 400), fill=muted, anchor="ma")
+        dr.text((x, y + 40), val, font=_fit(dr, val, "display", 700, cw - 24, 48), fill=col, anchor="ma")
+        if i:
+            dr.line((PAD + cw * i, y, PAD + cw * i, y + 96), fill=_hex(LINE), width=2)
+
+    # Footer
+    dr.line((PAD, fy, W - PAD, fy), fill=_hex(LINE), width=2)
+    dr.text((W / 2, fy + 26), f"Check any NSE stock free at {SITE_URL}", font=_font("body", 32, 600), fill=ink, anchor="ma")
+    dr.text((W / 2, fy + 70), "For learning only. Not investment advice.", font=_font("body", 26, 400), fill=muted, anchor="ma")
+
+    out = io.BytesIO()
+    img.convert("RGB").save(out, format="PNG", optimize=True)
+    return out.getvalue()
+
 
 # ----------------------------------------------------------------------------
 # Streamlit web app
@@ -833,6 +1011,20 @@ def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
                 st.plotly_chart(rf, config=PLOTLY_CFG, width="stretch")
             st.caption("Scores compare this company with simple benchmarks, not with other companies. "
                        "Categories without data are left out of the overall grade.")
+
+    with st.container(border=True):
+        s_text, s_btn = st.columns([3, 1.3], vertical_alignment="center")
+        s_text.markdown("#### Share this result\nDownload a ready-made picture for WhatsApp, Instagram or "
+                        "your status. It shows the verdict, the meter and the report card.")
+        try:
+            png = share_card_png(d, r, card)
+            fname = d["symbol"].split(".")[0].replace("&", "and") + "-fair-value.png"
+            s_btn.download_button("Download share picture", png, file_name=fname, mime="image/png",
+                                  type="primary", width="stretch")
+            with st.expander("Preview the picture"):
+                st.image(png, width=420)
+        except Exception as e:
+            s_btn.caption(f"Share picture unavailable: {e}")
 
     m = st.columns(5)
     m[0].metric("Price", rs(r["price"]))
