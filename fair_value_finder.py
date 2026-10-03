@@ -863,7 +863,8 @@ LOGO_SVG = ('<svg class="fvf-logo" viewBox="0 0 32 32" aria-hidden="true" fill="
 CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Sans+3:wght@400;600;700&family=Noto+Sans+Tamil:wght@400;600;700&display=swap');
-html, body, [class*="st-"], .stMarkdown, p, li, label {{ font-family: {FONT}; }}
+html, body, .stMarkdown, p, li, label, input, textarea, button, [data-testid="stMetricValue"] {{ font-family: {FONT}; }}
+[data-testid="stIconMaterial"], .material-symbols-rounded {{ font-family: "Material Symbols Rounded" !important; }}
 h1, h2, h3, h4, .fvf-name, .fvf-brand {{ font-family: 'Bricolage Grotesque', {FONT}; color: {INK}; letter-spacing: -0.015em; }}
 h4 {{ font-weight: 700; }}
 .block-container {{ padding-top: 3.2rem; max-width: 1160px; }}
