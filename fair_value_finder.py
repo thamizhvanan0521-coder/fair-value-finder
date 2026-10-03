@@ -932,6 +932,18 @@ h4 {{ font-weight: 700; }}
     color: {GOLD_TEXT} !important; fill: {GOLD_TEXT}; }}
 [data-testid="stExpander"] details {{ border-radius: 12px; }}
 
+/* Price meter (SVG scales with its panel) */
+.fvf-gauge {{ max-width: 380px; margin: .2rem auto .4rem; }}
+.fvf-gauge svg {{ width: 100%; height: auto; display: block; overflow: visible; }}
+.fvf-gauge .g-fair {{ font: 600 12.5px {FONT}; fill: {GOLD_TEXT}; }}
+.fvf-gauge .g-end {{ font: 600 12.5px {FONT}; }}
+.fvf-gauge .g-price {{ font: 800 32px 'Bricolage Grotesque', {FONT}; fill: {INK}; }}
+.fvf-gauge .g-diff {{ font: 700 15px {FONT}; }}
+/* Side-by-side panels wrap onto their own rows before they get too narrow */
+[data-testid="stHorizontalBlock"]:has(.st-key-fvf-panel-gauge) {{ flex-wrap: wrap !important; }}
+[data-testid="stHorizontalBlock"]:has(.st-key-fvf-panel-gauge) > [data-testid="stColumn"] {{
+    min-width: min(340px, 100%) !important; flex: 1 1 340px !important; }}
+
 /* Today's top five */
 .fvf-pick {{ background: #FDFBF6; border: 1px solid {LINE}; border-top: 4px solid {EMERALD}; border-radius: 14px;
             padding: .8rem .85rem; margin-bottom: .45rem; min-height: 9.5rem; }}
@@ -1012,31 +1024,46 @@ def _base_layout(fig, height):
     return fig
 
 
-def gauge_fig(r):
-    """Speedometer: where today's price sits against the margin-of-safety price and fair value."""
-    import plotly.graph_objects as go
+def gauge_svg(r):
+    """Price meter as inline SVG: scales cleanly to any panel width (Plotly's fixed font sizes overlap when narrow)."""
+    import math as m
     price, fair, bb = r["price"], r["fair"], r["buy_below"]
     lo = max(0.0, min(fair * 0.5, price * 0.9))
     hi = max(fair * 1.5, price * 1.1)
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number+delta", value=price,
-        number=dict(prefix="₹", valueformat=",.0f", font=dict(size=28, family="Bricolage Grotesque, " + FONT, color=INK)),
-        delta=dict(reference=fair, relative=True, valueformat="+.0%", suffix=tr("g_vs"),
-                   increasing=dict(color=TONE["bad"]), decreasing=dict(color=TONE["good"])),
-        gauge=dict(
-            axis=dict(range=[lo, hi], tickprefix="₹", tickformat=",.0f", tickcolor=MUTED, nticks=4,
-                      tickfont=dict(size=11, color=MUTED)),
-            bar=dict(color=INK, thickness=0.22),
-            bgcolor=CARD, borderwidth=0,
-            steps=[dict(range=[lo, bb], color="#D7EBDF"),
-                   dict(range=[bb, fair], color="#F5E6C8"),
-                   dict(range=[fair, hi], color="#F4D5D2")],
-            threshold=dict(line=dict(color=INK, width=3), thickness=0.85, value=fair),
-        ),
-    ))
-    fig = _base_layout(fig, 250)
-    fig.update_layout(margin=dict(l=34, r=34, t=36, b=6))
-    return fig
+    cx, cy, R, th = 160, 150, 118, 26
+
+    def ang(v):                                    # 180 deg at the left end, 0 deg at the right end
+        return m.pi * (1 - clip((v - lo) / (hi - lo), 0, 1))
+
+    def pt(a, rad):
+        return cx + rad * m.cos(a), cy - rad * m.sin(a)
+
+    def arc(v0, v1, col):
+        (x0, y0), (x1, y1) = pt(ang(v0), R), pt(ang(v1), R)
+        return (f'<path d="M{x0:.1f} {y0:.1f} A{R} {R} 0 0 1 {x1:.1f} {y1:.1f}" stroke="{col}" '
+                f'stroke-width="{th}" fill="none"/>')
+
+    segs = "".join(arc(a, b, c) for a, b, c in ((lo, bb, "#9FD3B5"), (bb, fair, "#EDCB86"), (fair, hi, "#EBA9A0")) if b > a)
+    ft = ang(fair)
+    (tx0, ty0), (tx1, ty1) = pt(ft, R - th / 2 - 7), pt(ft, R + th / 2 + 7)
+    lx, ly = pt(ft, R + th / 2 + 14)
+    anchor = "middle" if abs(m.cos(ft)) < 0.35 else ("end" if m.cos(ft) < 0 else "start")
+    nx, ny = pt(ang(price), R - th / 2 - 16)
+    diff = (price / fair - 1) * 100
+    dcol = TONE["bad"] if diff > 0 else TONE["good"]
+    dtxt = tr("above_fair" if diff > 0 else "below_fair", d=f"{abs(diff):.0f}")
+    label = f'{tr("h_gauge")}: ₹{price:,.0f}, {dtxt}'
+    return (f'<div class="fvf-gauge"><svg viewBox="-44 -22 408 262" role="img" aria-label="{_esc(label)}">'
+            f'{segs}'
+            f'<line x1="{tx0:.1f}" y1="{ty0:.1f}" x2="{tx1:.1f}" y2="{ty1:.1f}" stroke="{GOLD_TEXT}" stroke-width="4" stroke-linecap="round"/>'
+            f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="{anchor}" class="g-fair">{_esc(tr("lbl_fair", x=f"{fair:,.0f}"))}</text>'
+            f'<line x1="{cx}" y1="{cy}" x2="{nx:.1f}" y2="{ny:.1f}" stroke="{INK}" stroke-width="6" stroke-linecap="round"/>'
+            f'<circle cx="{cx}" cy="{cy}" r="11" fill="{GOLD}"/><circle cx="{cx}" cy="{cy}" r="4.5" fill="#fff"/>'
+            f'<text x="{cx - R}" y="{cy + 22}" text-anchor="middle" class="g-end" fill="{TONE["good"]}">{_esc(tr("card_cheap"))}</text>'
+            f'<text x="{cx + R}" y="{cy + 22}" text-anchor="middle" class="g-end" fill="{TONE["bad"]}">{_esc(tr("card_costly"))}</text>'
+            f'<text x="{cx}" y="{cy + 50}" text-anchor="middle" class="g-price">₹{price:,.0f}</text>'
+            f'<text x="{cx}" y="{cy + 76}" text-anchor="middle" class="g-diff" fill="{dcol}">{_esc(dtxt)}</text>'
+            f'</svg></div>')
 
 
 def radar_fig(cards, names=None):
@@ -1647,7 +1674,7 @@ def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
         with st.container(border=True, key="fvf-panel-gauge"):
             st.markdown(f"#### {tr('h_gauge')}")
             if r["fair"] and r["price"]:
-                st.plotly_chart(gauge_fig(r), config=PLOTLY_CFG, width="stretch")
+                st.markdown(gauge_svg(r), unsafe_allow_html=True)
                 st.caption(tr("gauge_note"))
             else:
                 st.info(tr("no_fair_meter"))
