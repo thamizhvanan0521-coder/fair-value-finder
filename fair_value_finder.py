@@ -534,7 +534,7 @@ CSS = f"""
 html, body, [class*="st-"], .stMarkdown, p, li, label {{ font-family: {FONT}; }}
 h1, h2, h3, h4, .fvf-name, .fvf-brand {{ font-family: 'Bricolage Grotesque', {FONT}; color: {INK}; letter-spacing: -0.015em; }}
 h4 {{ font-weight: 700; }}
-.block-container {{ padding-top: 1.6rem; max-width: 1160px; }}
+.block-container {{ padding-top: 3.2rem; max-width: 1160px; }}
 
 /* Header: navy band with gold logo, tagline and the class contact row */
 .fvf-head {{ background: {NAVY}; border-radius: 20px; padding: 1.6rem 1.8rem 1.2rem; margin-bottom: 1.4rem;
@@ -562,7 +562,7 @@ h4 {{ font-weight: 700; }}
 .fvf-hero .fvf-name {{ font-size: 2rem; font-weight: 800; line-height: 1.12; margin: 0; }}
 .fvf-sub {{ color: {MUTED}; font-size: .95rem; margin: .35rem 0 .85rem; }}
 .fvf-reason {{ font-size: 1.06rem; line-height: 1.55; max-width: 62ch; margin: 0; color: #1A1F36; }}
-.fvf-stamp {{ flex: 0 0 auto; transform: rotate(-6deg); border: 4px double var(--c); color: var(--c);
+.fvf-stamp {{ flex: 0 1 auto; box-sizing: border-box; transform: rotate(-6deg); border: 4px double var(--c); color: var(--c);
              border-radius: 12px; padding: .6rem 1.15rem; text-align: center; font-family: 'Bricolage Grotesque', {FONT};
              font-weight: 800; font-size: 1.35rem; line-height: 1.15; max-width: 15rem;
              background: color-mix(in srgb, var(--c) 7%, white);
@@ -599,7 +599,9 @@ h4 {{ font-weight: 700; }}
 @media (max-width: 640px) {{
   .fvf-head {{ padding: 1.2rem 1.1rem 1rem; border-radius: 16px; }}
   .fvf-head .fvf-brand {{ font-size: 1.65rem; }} .fvf-logo {{ width: 30px; height: 30px; }}
-  .fvf-hero .fvf-name {{ font-size: 1.5rem; }} .fvf-hero {{ padding: 1.1rem; }} .fvf-stamp {{ font-size: 1.1rem; }}
+  .fvf-hero .fvf-name {{ font-size: 1.5rem; }} .fvf-hero {{ padding: 1.1rem; }}
+  .fvf-stamp {{ font-size: 1.05rem; max-width: calc(100% - 1.5rem); margin: .3rem auto 0; padding: .5rem .9rem;
+               transform: rotate(-4deg); animation: none; }}
 }}
 </style>
 """
