@@ -147,6 +147,17 @@ TEXT = {
     "m_price": ("Price", "விலை"),
     "m_fair": ("Fair value", "நியாய மதிப்பு"),
     "m_safety": ("Margin-of-safety price", "பாதுகாப்பு விலை"),
+    "m_bear": ("Bear-case value", "மோசமான நிலை மதிப்பு"),
+    "safety_note": ("The margin-of-safety price is the lower of two figures: fair value minus your {m}% margin of safety (₹{a}), "
+                    "and the bear-case value (₹{b}), which is EPS × a P/E of {pe}, the cheaper end of what the market has paid "
+                    "for this stock in recent years.",
+                    "பாதுகாப்பு விலை என்பது இரண்டில் குறைவானது: நியாய மதிப்பிலிருந்து உங்கள் {m}% பாதுகாப்பு வரம்பைக் கழித்த விலை (₹{a}), "
+                    "மற்றும் மோசமான நிலை மதிப்பு (₹{b}). மோசமான நிலை மதிப்பு = EPS × {pe} P/E; இது சமீப ஆண்டுகளில் இந்தப் பங்குக்குச் "
+                    "சந்தை கொடுத்த குறைந்த P/E அளவு."),
+    "safety_note_simple": ("The margin-of-safety price is fair value minus your {m}% margin of safety. There is not enough P/E "
+                           "history for a bear-case value.",
+                           "பாதுகாப்பு விலை என்பது நியாய மதிப்பிலிருந்து உங்கள் {m}% பாதுகாப்பு வரம்பைக் கழித்த விலை. மோசமான நிலை "
+                           "மதிப்புக்குப் போதுமான P/E வரலாறு இல்லை."),
     "m_upside": ("Upside to fair value", "நியாய மதிப்பு வரை உயர்வு"),
     "m_52": ("52-week low / high", "52 வார குறைவு / உயர்வு"),
     "m_from_high": ("{x}% from high", "உச்சத்தில் இருந்து {x}%"),
@@ -367,7 +378,13 @@ def analyse(d: dict, discount=12.0, terminal=5.0, mos=15.0, overrides=None) -> d
     if roe is None and eps and eps > 0 and bvps and bvps > 0:
         roe, roe_calc = eps / bvps * 100, True          # Yahoo often leaves ROE blank; EPS / book is a close estimate
     shares, fcf = _num(d.get("shares")), _num(d.get("fcf"))
-    fcfps = fcf / shares if (fcf is not None and shares) else None
+    H0 = d.get("hist") or {}
+    fcf_hist = [x for x in (_num(v) for v in (H0.get("fcf") or [])) if x is not None][-3:]
+    if len(fcf_hist) >= 2:
+        fcf_base, fcf_src = sum(fcf_hist) / len(fcf_hist), f"the average of the last {len(fcf_hist)} years"
+    else:
+        fcf_base, fcf_src = fcf, "the latest year"
+    fcfps = fcf_base / shares if (fcf_base is not None and shares) else None
     H = d.get("hist") or {}
     rev_c = cagr(H.get("revenue"))
     eps_c = cagr(H.get("eps"))
@@ -448,7 +465,7 @@ def analyse(d: dict, discount=12.0, terminal=5.0, mos=15.0, overrides=None) -> d
             pv += cf / (1 + r) ** y
         pv += cf * (1 + tg) / (r - tg) / (1 + r) ** 10
         methods.append(("Cash-flow DCF", pv,
-                        f"Free cash flow per share of ₹{fcfps:.2f}, growing {g1*100:.1f}% a year for five years and slowing to {terminal}% by year 10, discounted at {discount}%."))
+                        f"Free cash flow per share of ₹{fcfps:.2f} ({fcf_src}), growing {g1*100:.1f}% a year for five years and slowing to {terminal}% by year 10, discounted at {discount}%."))
     else:
         why = ("free cash flow is negative" if (fcfps is not None and fcfps <= 0)
                else "free cash flow is missing, or the discount rate is not above terminal growth")
@@ -456,7 +473,15 @@ def analyse(d: dict, discount=12.0, terminal=5.0, mos=15.0, overrides=None) -> d
 
     vals = [v for _, v, _ in methods if v is not None and v > 0]
     fair = statistics.median(vals) if vals else None
-    buy_below = fair * (1 - mos / 100) if fair else None
+    mos_price = fair * (1 - mos / 100) if fair else None
+    bear = bear_pe = None
+    if eps and eps > 0 and len(hist_pes) >= 3:
+        sp = sorted(hist_pes)
+        pos = 0.25 * (len(sp) - 1)                       # 25th percentile, linear interpolation
+        i = int(pos)
+        bear_pe = clip(sp[i] + (sp[min(i + 1, len(sp) - 1)] - sp[i]) * (pos - i), 4, 60)
+        bear = eps * bear_pe
+    buy_below = min(mos_price, bear) if (mos_price and bear) else mos_price
 
     # Quality checks (different set for lenders)
     ni = [x for x in (_num(v) for v in (H.get("net_income") or [])) if x is not None][-5:]
@@ -518,6 +543,7 @@ def analyse(d: dict, discount=12.0, terminal=5.0, mos=15.0, overrides=None) -> d
     reason = verdict_reason(code, args, missing >= 3 and quality is not None, "en")
 
     return dict(code=code, args=args, note_missing=(missing >= 3 and quality is not None), roe_calc=roe_calc,
+                mos_price=mos_price, bear=bear, bear_pe=bear_pe, fcf_src=fcf_src,
                 price=price, eps=eps, bvps=bvps, roe=roe, fcfps=fcfps, rev_c=rev_c, eps_c=eps_c, lender=lender,
                 g_used=g_used, g_src=g_src, hist_pe=hist_pe, n_hist_pe=len(hist_pes),
                 methods=methods, fair=fair, buy_below=buy_below, checks=rows, quality=quality,
@@ -823,8 +849,10 @@ def cli(argv):
         r = analyse(d, a.discount, a.terminal, a.mos)
         print(f"{d['name']} ({d['symbol']})  {d['sector']} / {d['industry']}")
         print(f"VERDICT : {r['verdict']}   (quality {r['quality']}%)")
-        print(f"Price {rs(r['price'])} | Fair value {rs(r['fair'])} | Buy below {rs(r['buy_below'])}")
+        print(f"Price {rs(r['price'])} | Fair value {rs(r['fair'])} | Safety price {rs(r['buy_below'])}")
         print(f"52-week range {rs(d['lo52'])} - {rs(d['hi52'])}")
+        if r.get("bear"):
+            print(f"Bear-case value {rs(r['bear'])} (EPS x {r['bear_pe']:.1f} P/E, cheaper end of its history)")
         print(r["reason"])
         print("-- Fair value methods (fair = median)")
         for n, v, how in r["methods"]:
@@ -1711,12 +1739,19 @@ def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
     m[0].metric(tr("m_price"), rs(r["price"]))
     m[1].metric(tr("m_fair"), rs(r["fair"]))
     m[2].metric(tr("m_safety"), rs(r["buy_below"]))
-    m2 = st.columns(2)
+    m2 = st.columns(3)
     up = (r["fair"] / r["price"] - 1) * 100 if r["fair"] and r["price"] else None
     m2[0].metric(tr("m_upside"), pct(up, True))
+    m2[1].metric(tr("m_bear"), rs(r.get("bear")))
     if d.get("hi52") and d.get("lo52") and r["price"]:
-        m2[1].metric(tr("m_52"), f"₹{d['lo52']:,.0f} / ₹{d['hi52']:,.0f}",
+        m2[2].metric(tr("m_52"), f"₹{d['lo52']:,.0f} / ₹{d['hi52']:,.0f}",
                      tr("m_from_high", x=f"{(r['price'] / d['hi52'] - 1) * 100:.1f}"), delta_color="off")
+
+    if r["fair"]:
+        if r.get("bear"):
+            st.caption(tr("safety_note", m=round(mos), a=f"{r['mos_price']:,.0f}", b=f"{r['bear']:,.0f}", pe=f"{r['bear_pe']:.1f}"))
+        else:
+            st.caption(tr("safety_note_simple", m=round(mos)))
 
     tab1, tab2, tab3, tab4 = st.tabs([tr("t_details"), tr("t_chart"), tr("t_future"), tr("t_fin")])
 
