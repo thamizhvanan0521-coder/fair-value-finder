@@ -596,6 +596,10 @@ h4 {{ font-weight: 700; }}
 [data-baseweb="tab-highlight"] {{ background-color: {GOLD} !important; }}
 [data-baseweb="tab"] p {{ font-weight: 600; }}
 [data-testid="stSidebar"] {{ border-right: 1px solid {LINE}; }}
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentInfo"]) {{ background: {GOLD_SOFT} !important;
+    border: 1px solid rgba(201,154,62,.45); border-radius: 12px; }}
+[data-testid="stAlertContentInfo"], [data-testid="stAlertContentInfo"] p, [data-testid="stAlertContentInfo"] svg {{
+    color: {GOLD_TEXT} !important; fill: {GOLD_TEXT}; }}
 [data-testid="stExpander"] details {{ border-radius: 12px; }}
 
 @media (max-width: 640px) {{
