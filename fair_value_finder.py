@@ -77,14 +77,14 @@ def analyse(d: dict, discount=12.0, terminal=5.0, mos=15.0, overrides=None) -> d
 
     # Growth used for valuation: manual override, else EPS growth, else profit growth, else revenue growth
     g_used = _num(o.get("growth"))
-    g_src = "your override"
+    g_src = "your own growth rate"
     if g_used is None:
         for val, src in ((eps_c, "EPS growth"), (ni_c, "profit growth"), (rev_c, "revenue growth")):
             if val is not None:
                 g_used, g_src = val, src
                 break
     if g_used is None:
-        g_used, g_src = 10.0, "default (no history)"
+        g_used, g_src = 10.0, "a default rate, as no history is available"
 
     hist_pes = [p for p in (_num(x) for x in (d.get("hist_pe") or [])) if p is not None and 0 < p < 150]
     hist_pe = _median(hist_pes)
@@ -94,24 +94,24 @@ def analyse(d: dict, discount=12.0, terminal=5.0, mos=15.0, overrides=None) -> d
     if eps and eps > 0 and hist_pe:
         pe1 = clip(hist_pe, 6, 60)
         methods.append(("Historical P/E", eps * pe1,
-                        f"EPS Rs{eps:.2f} x its own median P/E {pe1:.1f} over the last {len(hist_pes)} years"))
+                        f"EPS of ₹{eps:.2f} × the company's own median P/E of {pe1:.1f} over the last {len(hist_pes)} years."))
     else:
-        methods.append(("Historical P/E", None, "Skipped: needs positive EPS and past P/E data"))
+        methods.append(("Historical P/E", None, "Not used: this method needs positive EPS and past P/E data."))
 
     # 2. Growth-adjusted P/E (fair P/E ~ growth, kept between 10 and 35)
     if eps and eps > 0:
         fair_pe = clip(g_used, 10, 35)
         methods.append(("Growth-adjusted P/E", eps * fair_pe,
-                        f"EPS Rs{eps:.2f} x fair P/E {fair_pe:.1f} ({g_src} {g_used:.1f}%, capped 10-35)"))
+                        f"EPS of ₹{eps:.2f} × a fair P/E of {fair_pe:.1f}, based on {g_src} of {g_used:.1f}% (kept between 10 and 35)."))
     else:
-        methods.append(("Growth-adjusted P/E", None, "Skipped: EPS is zero or negative"))
+        methods.append(("Growth-adjusted P/E", None, "Not used: EPS is zero or negative."))
 
     # 3. Graham number (conservative; tends to undervalue high-ROE businesses)
     if eps and eps > 0 and bvps and bvps > 0:
         methods.append(("Graham number", math.sqrt(22.5 * eps * bvps),
-                        f"sqrt(22.5 x EPS Rs{eps:.2f} x book value/share Rs{bvps:.2f})"))
+                        f"Square root of 22.5 × EPS of ₹{eps:.2f} × book value per share of ₹{bvps:.2f}."))
     else:
-        methods.append(("Graham number", None, "Skipped: needs positive EPS and book value"))
+        methods.append(("Graham number", None, "Not used: this method needs positive EPS and book value."))
 
     # 4a. Banks/NBFCs: justified P/B = ROE / cost of equity
     # 4b. Others: two-stage DCF on free cash flow
@@ -119,9 +119,9 @@ def analyse(d: dict, discount=12.0, terminal=5.0, mos=15.0, overrides=None) -> d
         if roe and roe > 0 and bvps and bvps > 0:
             jpb = clip(roe / discount, 0.3, 5)
             methods.append(("Justified P/B (banks)", bvps * jpb,
-                            f"Book value/share Rs{bvps:.2f} x justified P/B {jpb:.2f} (ROE {roe:.1f}% / cost of equity {discount}%)"))
+                            f"Book value per share of ₹{bvps:.2f} × a justified P/B of {jpb:.2f} (ROE of {roe:.1f}% ÷ cost of equity of {discount}%)."))
         else:
-            methods.append(("Justified P/B (banks)", None, "Skipped: needs positive ROE and book value"))
+            methods.append(("Justified P/B (banks)", None, "Not used: this method needs positive ROE and book value."))
     elif fcfps and fcfps > 0 and discount > terminal:
         g1 = clip(rev_c if rev_c is not None else 8, 0, 20) / 100
         r, tg = discount / 100, terminal / 100
@@ -132,10 +132,11 @@ def analyse(d: dict, discount=12.0, terminal=5.0, mos=15.0, overrides=None) -> d
             pv += cf / (1 + r) ** y
         pv += cf * (1 + tg) / (r - tg) / (1 + r) ** 10
         methods.append(("Cash-flow DCF", pv,
-                        f"FCF/share Rs{fcfps:.2f} grows {g1*100:.1f}% for 5 yrs, fades to {terminal}% by yr 10, discounted at {discount}%"))
+                        f"Free cash flow per share of ₹{fcfps:.2f}, growing {g1*100:.1f}% a year for five years and slowing to {terminal}% by year 10, discounted at {discount}%."))
     else:
-        why = "free cash flow is negative" if (fcfps is not None and fcfps <= 0) else "FCF missing or discount <= terminal growth"
-        methods.append(("Cash-flow DCF", None, f"Skipped: {why}"))
+        why = ("free cash flow is negative" if (fcfps is not None and fcfps <= 0)
+               else "free cash flow is missing, or the discount rate is not above terminal growth")
+        methods.append(("Cash-flow DCF", None, f"Not used: {why}."))
 
     vals = [v for _, v, _ in methods if v is not None and v > 0]
     fair = statistics.median(vals) if vals else None
@@ -150,26 +151,26 @@ def analyse(d: dict, discount=12.0, terminal=5.0, mos=15.0, overrides=None) -> d
         roa = _num(d.get("roa"))
         jpb_val = (roe / discount) if (roe and roe > 0) else None
         checks = [
-            ("Return on equity", roe, "%", lambda x: x >= 12, ">= 12%"),
-            ("Return on assets", roa, "%", lambda x: x >= 1.0, ">= 1%"),
-            ("Net profit margin", _num(d.get("net_margin")), "%", lambda x: x >= 15, ">= 15%"),
-            ("Revenue growth (CAGR)", rev_c, "%", lambda x: x >= 10, ">= 10% a year"),
-            ("EPS growth (CAGR)", eps_c, "%", lambda x: x >= 10, ">= 10% a year"),
-            ("Profitable every year", ni_all, "bool", lambda x: x is True, "No loss years"),
+            ("Return on equity", roe, "%", lambda x: x >= 12, "At least 12%"),
+            ("Return on assets", roa, "%", lambda x: x >= 1.0, "At least 1%"),
+            ("Net profit margin", _num(d.get("net_margin")), "%", lambda x: x >= 15, "At least 15%"),
+            ("Revenue growth (CAGR)", rev_c, "%", lambda x: x >= 10, "At least 10% a year"),
+            ("EPS growth (CAGR)", eps_c, "%", lambda x: x >= 10, "At least 10% a year"),
+            ("Profitable every year", ni_all, "bool", lambda x: x is True, "No loss-making years"),
             ("P/B vs justified P/B", (pb / jpb_val) if (pb and jpb_val) else None, "x",
-             lambda x: x <= 1.0, "<= 1.0x (not overpaying for book)"),
+             lambda x: x <= 1.0, "1.0x or less (not overpaying for book value)"),
         ]
     else:
         fcf_conv = (sum(fc) / sum(ni) * 100) if (fc and ni and sum(ni) > 0) else None
         checks = [
-            ("Return on equity", roe, "%", lambda x: x >= 15, ">= 15%"),
-            ("Net profit margin", _num(d.get("net_margin")), "%", lambda x: x >= 10, ">= 10%"),
-            ("Revenue growth (CAGR)", rev_c, "%", lambda x: x >= 10, ">= 10% a year"),
-            ("EPS growth (CAGR)", eps_c, "%", lambda x: x >= 10, ">= 10% a year"),
-            ("Profitable every year", ni_all, "bool", lambda x: x is True, "No loss years"),
-            ("Debt / Equity", _num(d.get("de")), "x", lambda x: x <= 0.5, "<= 0.5"),
-            ("Current ratio", _num(d.get("current_ratio")), "x", lambda x: x >= 1.2, ">= 1.2"),
-            ("FCF / net profit", fcf_conv, "%", lambda x: x >= 80, ">= 80%"),
+            ("Return on equity", roe, "%", lambda x: x >= 15, "At least 15%"),
+            ("Net profit margin", _num(d.get("net_margin")), "%", lambda x: x >= 10, "At least 10%"),
+            ("Revenue growth (CAGR)", rev_c, "%", lambda x: x >= 10, "At least 10% a year"),
+            ("EPS growth (CAGR)", eps_c, "%", lambda x: x >= 10, "At least 10% a year"),
+            ("Profitable every year", ni_all, "bool", lambda x: x is True, "No loss-making years"),
+            ("Debt / Equity", _num(d.get("de")), "x", lambda x: x <= 0.5, "0.5 or less"),
+            ("Current ratio", _num(d.get("current_ratio")), "x", lambda x: x >= 1.2, "1.2 or more"),
+            ("FCF / net profit", fcf_conv, "%", lambda x: x >= 80, "At least 80%"),
         ]
     rows = []
     for name, v, fmt, test, rule in checks:
@@ -181,23 +182,23 @@ def analyse(d: dict, discount=12.0, terminal=5.0, mos=15.0, overrides=None) -> d
 
     # Verdict
     if not price:
-        verdict, tone, reason = "No price", "warn", "Price data missing."
+        verdict, tone, reason = "No price", "warn", "Price data is missing for this stock."
     elif quality is not None and quality < 50:
         verdict, tone = "AVOID", "bad"
-        reason = f"Fundamentals weak ({quality}% of checks pass). A low price alone is not a reason to buy."
+        reason = f"The fundamentals are weak: only {quality}% of the quality checks pass. A low price alone is not a reason to buy."
     elif not fair:
-        verdict, tone, reason = "CAN'T VALUE", "warn", "No valuation method applies (losses or missing data)."
+        verdict, tone, reason = "CAN'T VALUE", "warn", "None of the valuation methods can be used, because of losses or missing data."
     elif price <= buy_below:
         verdict, tone = "BUY ZONE", "good"
-        reason = f"Price is {(1 - price / fair) * 100:.0f}% below fair value, inside your {mos:.0f}% margin of safety."
+        reason = f"The price is {(1 - price / fair) * 100:.0f}% below fair value, inside your {mos:.0f}% margin of safety."
     elif price <= fair:
         verdict, tone = "NEAR FAIR VALUE", "warn"
-        reason = f"Below fair value but not by {mos:.0f}%. Wait for Rs{buy_below:,.0f} or lower."
+        reason = f"The price is below fair value, but not by your full {mos:.0f}% margin of safety. Wait for ₹{buy_below:,.0f} or lower."
     else:
         verdict, tone = "ABOVE FAIR VALUE - NO BUY", "bad"
-        reason = f"Price is {(price / fair - 1) * 100:.0f}% above fair value. If you hold, consider booking profit."
+        reason = f"The price is {(price / fair - 1) * 100:.0f}% above fair value. If you already own it, consider booking some profit."
     if missing >= 3 and quality is not None:
-        reason += f" Note: {missing} checks had no data, so the quality score is less reliable."
+        reason += f" {missing} checks had no data, so treat the quality score with care."
 
     return dict(price=price, eps=eps, bvps=bvps, roe=roe, fcfps=fcfps, rev_c=rev_c, eps_c=eps_c, lender=lender,
                 g_used=g_used, g_src=g_src, hist_pe=hist_pe, n_hist_pe=len(hist_pes),
@@ -353,7 +354,7 @@ def fetch(symbol: str) -> dict:
     if price is None and ph is not None and not ph.empty:
         price = float(ph["Close"].dropna().iloc[-1])
     if price is None:
-        raise ValueError(f"No data for {ysym}. Check the NSE symbol (e.g. SBIN, TCS, TATASTEEL).")
+        raise ValueError(f"No data was found for {ysym}. Check the NSE symbol (for example SBIN, TCS or TATASTEEL).")
 
     try:
         inc = t.income_stmt
@@ -440,11 +441,11 @@ def fetch(symbol: str) -> dict:
 # ----------------------------------------------------------------------------
 
 def rs(v):
-    return "-" if v is None else f"Rs{v:,.2f}" if abs(v) < 100 else f"Rs{v:,.0f}"
+    return "-" if v is None else f"₹{v:,.2f}" if abs(v) < 100 else f"₹{v:,.0f}"
 
 
 def crore(v):
-    return "-" if v is None else f"Rs{v / 1e7:,.0f} Cr"
+    return "-" if v is None else f"₹{v / 1e7:,.0f} Cr"
 
 
 def pct(v, signed=False):
@@ -477,6 +478,10 @@ def cli(argv):
     p.add_argument("--discount", type=float, default=12, help="discount rate %% (default 12)")
     p.add_argument("--terminal", type=float, default=5, help="terminal growth %% (default 5)")
     a = p.parse_args(argv)
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
     for sym in a.symbol:
         print("=" * 70)
         try:
@@ -505,61 +510,96 @@ def cli(argv):
         if d.get("target_mean"):
             print(f"-- Analyst targets: low {rs(d['target_low'])} mean {rs(d['target_mean'])} high {rs(d['target_high'])}")
     print("=" * 70)
-    print("Educational tool, not investment advice. Promoter holding/pledge not included - check NSE.")
+    print("For learning only. This is not investment advice. Promoter holding and pledges are not included, so check NSE.")
 
 
 # ----------------------------------------------------------------------------
 # Look and feel: palette, CSS, charts
 # ----------------------------------------------------------------------------
 
-INK, PAPER, CARD, LINE, MUTED = "#1B2559", "#F1F3F6", "#FFFFFF", "#D5DAE3", "#5B6478"
-TONE = {"good": "#1F7A4D", "warn": "#B26B00", "bad": "#B42318"}
-GRADE_COLOR = {"A": "#1F7A4D", "B": "#3E8E5E", "C": "#B26B00", "D": "#C2410C", "F": "#B42318", "-": MUTED}
+INK, PAPER, CARD, LINE, MUTED = "#1B2559", "#F3F4F7", "#FFFFFF", "#DCE0E8", "#5B6478"
+NAVY, GOLD, GOLD_TEXT, GOLD_SOFT = "#0F1B3D", "#C9A962", "#8A6A2F", "#F4ECDC"
+TONE = {"good": "#1F7A4D", "warn": "#A86400", "bad": "#B42318"}
+GRADE_COLOR = {"A": "#1F7A4D", "B": "#3E8E5E", "C": "#A86400", "D": "#C2410C", "F": "#B42318", "-": MUTED}
 FONT = "Source Sans 3, Segoe UI, sans-serif"
+SHADOW = "0 1px 2px rgba(15,27,61,.05), 0 10px 28px rgba(15,27,61,.06)"
+
+LOGO_SVG = ('<svg class="fvf-logo" viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke="currentColor" '
+            'stroke-width="2" stroke-linecap="round"><path d="M16 4v23M5 8h22M10 27h12M5 8 2 17M5 8l3 9M27 8l-3 9M27 8l3 9"/>'
+            '<path d="M1.5 17a3.5 3.5 0 0 0 7 0zM23.5 17a3.5 3.5 0 0 0 7 0z" fill="currentColor"/></svg>')
 
 CSS = f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Sans+3:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Sans+3:wght@400;600;700&display=swap');
 html, body, [class*="st-"], .stMarkdown, p, li, label {{ font-family: {FONT}; }}
-h1, h2, h3, h4, .fvf-name, .fvf-brand {{ font-family: 'Bricolage Grotesque', {FONT}; color: {INK}; letter-spacing: -0.01em; }}
-.block-container {{ padding-top: 2rem; max-width: 1180px; }}
-.fvf-brand {{ font-size: 2.1rem; font-weight: 700; line-height: 1.1; margin: 0; }}
-.fvf-tag {{ color: {MUTED}; margin: .25rem 0 1rem; font-size: 1rem; }}
+h1, h2, h3, h4, .fvf-name, .fvf-brand {{ font-family: 'Bricolage Grotesque', {FONT}; color: {INK}; letter-spacing: -0.015em; }}
+h4 {{ font-weight: 700; }}
+.block-container {{ padding-top: 1.6rem; max-width: 1160px; }}
+
+/* Header: navy band with gold logo, tagline and the class contact row */
+.fvf-head {{ background: {NAVY}; border-radius: 20px; padding: 1.6rem 1.8rem 1.2rem; margin-bottom: 1.4rem;
+            border: 1px solid rgba(201,169,98,.35); box-shadow: {SHADOW}; }}
+.fvf-brandrow {{ display: flex; align-items: center; gap: .7rem; }}
+.fvf-logo {{ width: 38px; height: 38px; color: {GOLD}; flex: 0 0 auto; }}
+.fvf-brand {{ font-size: 2.15rem; font-weight: 800; line-height: 1.05; margin: 0; color: #fff; }}
+.fvf-tag {{ color: #C5CCE0; margin: .65rem 0 1.15rem; font-size: 1.07rem; line-height: 1.5; max-width: 60ch; }}
+.fvf-contact {{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .7rem 1rem;
+               border-top: 1px solid rgba(201,169,98,.3); padding-top: 1rem; }}
+.fvf-contact p {{ margin: 0; color: #E6E9F2; font-size: 1rem; }}
+.fvf-contact b {{ color: {GOLD}; font-weight: 700; }}
+.fvf-links {{ display: flex; gap: .55rem; flex-wrap: wrap; }}
+.fvf-links a {{ border-radius: 999px; padding: .45rem 1.1rem; font-weight: 700; text-decoration: none !important;
+               white-space: nowrap; font-size: .95rem; }}
+.fvf-links .gold {{ background: {GOLD}; color: {NAVY} !important; }}
+.fvf-links .ghost {{ border: 1.5px solid {GOLD}; color: {GOLD} !important; }}
+.fvf-links a:focus-visible {{ outline: 3px solid #fff; outline-offset: 2px; }}
+
+/* Hero with the verdict stamp */
 .fvf-hero {{ display: flex; gap: 1.5rem; align-items: center; justify-content: space-between; flex-wrap: wrap;
-            background: {CARD}; border: 1px solid {LINE}; border-radius: 14px; padding: 1.4rem 1.6rem; margin: .5rem 0 1rem; }}
+            background: {CARD}; border: 1px solid {LINE}; border-left: 5px solid {GOLD}; border-radius: 16px;
+            padding: 1.5rem 1.7rem; margin: .4rem 0 1.1rem; box-shadow: {SHADOW}; }}
 .fvf-hero-text {{ flex: 1 1 360px; min-width: 0; }}
-.fvf-name {{ font-size: 1.9rem; font-weight: 700; line-height: 1.15; margin: 0; }}
-.fvf-sub {{ color: {MUTED}; font-size: .95rem; margin: .3rem 0 .8rem; }}
-.fvf-reason {{ font-size: 1.05rem; line-height: 1.5; max-width: 62ch; margin: 0; color: #1A1F36; }}
+.fvf-name {{ font-size: 2rem; font-weight: 800; line-height: 1.12; margin: 0; }}
+.fvf-sub {{ color: {MUTED}; font-size: .95rem; margin: .35rem 0 .85rem; }}
+.fvf-reason {{ font-size: 1.06rem; line-height: 1.55; max-width: 62ch; margin: 0; color: #1A1F36; }}
 .fvf-stamp {{ flex: 0 0 auto; transform: rotate(-6deg); border: 4px double var(--c); color: var(--c);
-             border-radius: 10px; padding: .55rem 1.1rem; text-align: center; font-family: 'Bricolage Grotesque', {FONT};
-             font-weight: 700; font-size: 1.35rem; line-height: 1.15; max-width: 15rem; background: {CARD};
+             border-radius: 12px; padding: .6rem 1.15rem; text-align: center; font-family: 'Bricolage Grotesque', {FONT};
+             font-weight: 800; font-size: 1.35rem; line-height: 1.15; max-width: 15rem;
+             background: color-mix(in srgb, var(--c) 7%, white);
              animation: fvf-stamp .45s cubic-bezier(.2,1.6,.4,1) both; }}
 .fvf-stamp small {{ display: block; font-family: {FONT}; font-weight: 600; font-size: .8rem; margin-top: .25rem; opacity: .85; }}
 @keyframes fvf-stamp {{ from {{ transform: rotate(-6deg) scale(1.8); opacity: 0; }} to {{ transform: rotate(-6deg) scale(1); opacity: 1; }} }}
 @media (prefers-reduced-motion: reduce) {{ .fvf-stamp {{ animation: none; }} }}
-.fvf-panel {{ background: {CARD}; border: 1px solid {LINE}; border-radius: 14px; padding: 1rem 1.1rem .4rem; }}
-.fvf-panel h4 {{ margin: 0 0 .2rem; font-size: 1.1rem; }}
-.fvf-panel p {{ color: {MUTED}; margin: 0; font-size: .9rem; }}
+
+/* Panels (Streamlit containers with key="fvf-panel-...") */
+[class*="st-key-fvf-panel"] {{ background: {CARD}; border-radius: 16px !important; box-shadow: {SHADOW};
+                              border-color: {LINE} !important; }}
+.st-key-fvf-panel-share {{ background: {GOLD_SOFT} !important; border-color: rgba(201,169,98,.55) !important; }}
+.st-key-fvf-share-btn button {{ background: {NAVY} !important; border-color: {NAVY} !important; color: #fff !important;
+                               border-radius: 999px !important; font-weight: 700; }}
+
+/* Report card grades */
 .fvf-grades {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: .5rem; margin: .4rem 0 .6rem; }}
-.fvf-grade {{ border: 1px solid {LINE}; border-radius: 10px; padding: .45rem .6rem; display: flex; align-items: center; gap: .55rem; background: {PAPER}; }}
-.fvf-grade b {{ font-family: 'Bricolage Grotesque', {FONT}; font-size: 1.5rem; color: var(--c); min-width: 1.2ch; }}
-.fvf-grade span {{ font-size: .85rem; color: #1A1F36; line-height: 1.2; }}
+.fvf-grade {{ border: 1px solid {LINE}; border-radius: 12px; padding: .5rem .65rem; display: flex; align-items: center;
+             gap: .55rem; background: {PAPER}; }}
+.fvf-grade b {{ font-family: 'Bricolage Grotesque', {FONT}; font-size: 1.55rem; color: var(--c); min-width: 1.2ch; }}
+.fvf-grade span {{ font-size: .86rem; color: #1A1F36; line-height: 1.2; }}
 .fvf-grade em {{ display: block; font-style: normal; color: {MUTED}; font-size: .78rem; }}
-.fvf-contact {{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1rem;
-                background: {INK}; color: #fff; border-radius: 12px; padding: .75rem 1.1rem; margin: 0 0 1rem; }}
-.fvf-contact p {{ margin: 0; color: #fff; font-size: 1.02rem; }}
-.fvf-contact b {{ font-family: 'Bricolage Grotesque', {FONT}; }}
-.fvf-contact .fvf-links {{ display: flex; gap: .5rem; flex-wrap: wrap; }}
-.fvf-contact a {{ color: {INK} !important; background: #fff; border-radius: 8px; padding: .4rem .85rem; font-weight: 600;
-                 text-decoration: none; white-space: nowrap; }}
-.fvf-contact a:focus-visible {{ outline: 3px solid #9FD1B3; outline-offset: 2px; }}
-[data-testid="stMetric"] {{ background: {CARD}; border: 1px solid {LINE}; border-radius: 12px; padding: .7rem .9rem; }}
+
+/* Metrics, tabs, sidebar */
+[data-testid="stMetric"] {{ background: {CARD}; border: 1px solid {LINE}; border-radius: 14px; padding: .8rem 1rem;
+                           box-shadow: {SHADOW}; }}
 [data-testid="stMetricLabel"] p {{ color: {MUTED}; }}
-[data-testid="stMetricValue"] {{ font-family: 'Bricolage Grotesque', {FONT}; color: {INK}; }}
+[data-testid="stMetricValue"] {{ font-family: 'Bricolage Grotesque', {FONT}; color: {INK}; font-weight: 700; }}
+[data-baseweb="tab-highlight"] {{ background-color: {GOLD} !important; }}
+[data-baseweb="tab"] p {{ font-weight: 600; }}
+[data-testid="stSidebar"] {{ border-right: 1px solid {LINE}; }}
+[data-testid="stExpander"] details {{ border-radius: 12px; }}
+
 @media (max-width: 640px) {{
-  .fvf-brand {{ font-size: 1.6rem; }} .fvf-name {{ font-size: 1.45rem; }}
-  .fvf-hero {{ padding: 1rem; }} .fvf-stamp {{ font-size: 1.1rem; }}
+  .fvf-head {{ padding: 1.2rem 1.1rem 1rem; border-radius: 16px; }}
+  .fvf-brand {{ font-size: 1.65rem; }} .fvf-logo {{ width: 30px; height: 30px; }}
+  .fvf-name {{ font-size: 1.5rem; }} .fvf-hero {{ padding: 1.1rem; }} .fvf-stamp {{ font-size: 1.1rem; }}
 }}
 </style>
 """
@@ -582,11 +622,14 @@ def hero_html(d, r):
             f'{_esc(r["verdict"])}{q}</div></div>')
 
 
-def contact_html():
-    wa = f"https://wa.me/91{CONTACT_PHONE}?text=" + "Hi%2C%20I%20want%20to%20learn%20trading%20and%20option%20buying"
-    return (f'<div class="fvf-contact"><p><b>{CONTACT_LINE}.</b> Call or WhatsApp {CONTACT_DISPLAY}</p>'
-            f'<div class="fvf-links"><a href="tel:+91{CONTACT_PHONE}">Call</a>'
-            f'<a href="{wa}" target="_blank" rel="noopener">WhatsApp</a></div></div>')
+def header_html():
+    wa = f"https://wa.me/91{CONTACT_PHONE}?text=" + "Hi%2C%20I%20would%20like%20to%20learn%20trading%20and%20options%20buying."
+    return (f'<div class="fvf-head"><div class="fvf-brandrow">{LOGO_SVG}<p class="fvf-brand">Fair Value Finder</p></div>'
+            '<p class="fvf-tag">Type any NSE stock to see what it is really worth, how strong the business is, '
+            'and whether today\'s price is a bargain.</p>'
+            f'<div class="fvf-contact"><p><b>{CONTACT_LINE}.</b> Call or WhatsApp {CONTACT_DISPLAY}.</p>'
+            f'<div class="fvf-links"><a class="gold" href="tel:+91{CONTACT_PHONE}">Call now</a>'
+            f'<a class="ghost" href="{wa}" target="_blank" rel="noopener">WhatsApp</a></div></div></div>')
 
 
 def grades_html(card):
@@ -611,11 +654,11 @@ def gauge_fig(r):
     hi = max(fair * 1.5, price * 1.1)
     fig = go.Figure(go.Indicator(
         mode="gauge+number+delta", value=price,
-        number=dict(prefix="Rs", valueformat=",.0f", font=dict(size=34, family="Bricolage Grotesque, " + FONT, color=INK)),
+        number=dict(prefix="₹", valueformat=",.0f", font=dict(size=34, family="Bricolage Grotesque, " + FONT, color=INK)),
         delta=dict(reference=fair, relative=True, valueformat="+.0%", suffix=" vs fair",
                    increasing=dict(color=TONE["bad"]), decreasing=dict(color=TONE["good"])),
         gauge=dict(
-            axis=dict(range=[lo, hi], tickprefix="Rs", tickformat=",.0f", tickcolor=MUTED, nticks=6),
+            axis=dict(range=[lo, hi], tickprefix="₹", tickformat=",.0f", tickcolor=MUTED, nticks=6),
             bar=dict(color=INK, thickness=0.22),
             bgcolor=CARD, borderwidth=0,
             steps=[dict(range=[lo, bb], color="#D7EBDF"),
@@ -664,14 +707,14 @@ def candle_fig(ohlc, fair=None, buy_below=None, months=12):
                       annotation_text="Buy zone", annotation_position="bottom left",
                       annotation_font=dict(color=TONE["good"], size=12))
         fig.add_hline(y=fair, line=dict(color=INK, width=2, dash="dash"),
-                      annotation_text=f"Fair value Rs{fair:,.0f}", annotation_position="top left",
+                      annotation_text=f"Fair value ₹{fair:,.0f}", annotation_position="top left",
                       annotation_font=dict(color=INK, size=12))
         fig.add_hline(y=buy_below, line=dict(color=TONE["good"], width=1.5))
     ys = list(df["Low"]) + list(df["High"]) + ([fair, buy_below] if fair else [])
     pad = (max(ys) - min(ys)) * 0.08
     fig.update_layout(
         xaxis=dict(rangeslider=dict(visible=False), rangebreaks=[dict(bounds=["sat", "mon"])], gridcolor=LINE),
-        yaxis=dict(range=[min(ys) - pad, max(ys) + pad], tickprefix="Rs", tickformat=",.0f", gridcolor=LINE),
+        yaxis=dict(range=[min(ys) - pad, max(ys) + pad], tickprefix="₹", tickformat=",.0f", gridcolor=LINE),
         legend=dict(orientation="h", y=-0.12, x=0), hovermode="x unified",
     )
     return _base_layout(fig, 460)
@@ -682,7 +725,7 @@ PLOTLY_CFG = {"displayModeBar": False, "responsive": True}
 SITE_URL = "fair-value-finder.streamlit.app"
 CONTACT_PHONE = "8610025411"                       # shown on the site and on every share picture
 CONTACT_DISPLAY = "86100 25411"
-CONTACT_LINE = "Learn stock market trading and option buying"
+CONTACT_LINE = "Learn stock market trading and options buying"
 
 
 # ----------------------------------------------------------------------------
@@ -736,42 +779,63 @@ def _wrap(draw, text, font, max_w, max_lines=2):
     return lines
 
 
+CARD_THEME = dict(bg="#0A1230", card="#111C42", line="#26335F", gold="#C9A962", text="#FFFFFF", muted="#A3ADC8",
+                  good="#4CC38A", warn="#F0B44C", bad="#FF6B5E",
+                  arc_good="#2E8A63", arc_warn="#B8892F", arc_bad="#B4473F")
+
+
+def _scale_mark(dr, cx, cy, s, col):
+    """Small balance-scale logo: post, beam and two pans."""
+    w = max(2, s // 7)
+    dr.line((cx, cy - s, cx, cy + s * 0.8), fill=col, width=w)
+    dr.line((cx - s, cy - s * 0.6, cx + s, cy - s * 0.6), fill=col, width=w)
+    dr.line((cx - s * 0.5, cy + s * 0.8, cx + s * 0.5, cy + s * 0.8), fill=col, width=w)
+    for px in (cx - s, cx + s):
+        dr.line((px, cy - s * 0.6, px - s * 0.35, cy + s * 0.15), fill=col, width=max(1, w - 1))
+        dr.line((px, cy - s * 0.6, px + s * 0.35, cy + s * 0.15), fill=col, width=max(1, w - 1))
+        dr.chord((px - s * 0.42, cy - s * 0.15, px + s * 0.42, cy + s * 0.45), 0, 180, fill=col)
+
+
 def share_card_png(d: dict, r: dict, card: dict, today: str | None = None) -> bytes:
     import datetime
     import io
     import math as m
     from PIL import Image, ImageDraw
 
+    C = CARD_THEME
     W, H, PAD = 1080, 1350, 84
-    img = Image.new("RGBA", (W, H), _hex(PAPER))
+    img = Image.new("RGBA", (W, H), _hex(C["bg"]))
     dr = ImageDraw.Draw(img)
-    dr.rounded_rectangle((44, 44, W - 44, H - 44), radius=36, fill=_hex(CARD), outline=_hex(LINE), width=3)
-    ink, muted = _hex(INK), _hex(MUTED)
+    dr.rounded_rectangle((40, 40, W - 40, H - 40), radius=34, fill=_hex(C["card"]), outline=_hex(C["gold"], 150), width=2)
+    white, muted, gold = _hex(C["text"]), _hex(C["muted"]), _hex(C["gold"])
+    tones = {"good": _hex(C["good"]), "warn": _hex(C["warn"]), "bad": _hex(C["bad"])}
+    grade_tone = {"A": "good", "B": "good", "C": "warn", "D": "bad", "F": "bad"}
 
-    # Header: brand + date
+    # Header: logo mark + brand, date on the right
     if not today:
         try:
             from zoneinfo import ZoneInfo
             today = datetime.datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y")
         except Exception:
             today = datetime.date.today().strftime("%d %b %Y")
-    dr.text((PAD, 86), "Fair Value Finder", font=_font("display", 36, 700), fill=ink)
-    fd = _font("body", 30, 400)
-    dr.text((W - PAD - dr.textlength(today, font=fd), 92), today, font=fd, fill=muted)
-    dr.line((PAD, 152, W - PAD, 152), fill=_hex(LINE), width=2)
+    _scale_mark(dr, PAD + 22, 108, 22, gold)
+    dr.text((PAD + 64, 88), "Fair Value Finder", font=_font("display", 34, 700), fill=gold)
+    fd = _font("body", 28, 400)
+    dr.text((W - PAD - dr.textlength(today, font=fd), 94), today, font=fd, fill=muted)
+    dr.line((PAD, 152, W - PAD, 152), fill=_hex(C["line"]), width=2)
 
-    # Company name (up to 2 lines) + symbol / sector
+    # Company name (up to two lines) + symbol and sector
     y = 180
     fname = _font("display", 62, 700)
     for line in _wrap(dr, d["name"], fname, W - 2 * PAD):
-        dr.text((PAD, y), line, font=fname, fill=ink)
+        dr.text((PAD, y), line, font=fname, fill=white)
         y += 70
-    sub = " | ".join(x for x in (d["symbol"].replace(".NS", "").replace(".BO", ""), d.get("sector")) if x)
-    dr.text((PAD, y + 4), sub, font=_font("body", 32, 600), fill=muted)
+    sub = "  |  ".join(x for x in (d["symbol"].replace(".NS", "").replace(".BO", ""), d.get("sector")) if x)
+    dr.text((PAD, y + 4), sub, font=_font("body", 30, 600), fill=muted)
     top = y + 60                                       # first free pixel row below the header block
 
     price, fair, bb = r["price"], r["fair"], r["buy_below"]
-    tone = _hex(TONE[r["tone"]])
+    tone = tones[r["tone"]]
     has_gauge = bool(price and fair)
 
     # Build the stamp first so its height is known before laying out the page
@@ -782,14 +846,14 @@ def share_card_png(d: dict, r: dict, card: dict, today: str | None = None) -> by
     sw, sh = int(bbox[2] - bbox[0]) + 76, int(bbox[3] - bbox[1]) + 52
     stamp = Image.new("RGBA", (sw + 20, sh + 20), (0, 0, 0, 0))
     sd = ImageDraw.Draw(stamp)
-    sd.rounded_rectangle((10, 10, sw + 10, sh + 10), radius=18, outline=tone, width=7, fill=_hex(CARD))
+    sd.rounded_rectangle((10, 10, sw + 10, sh + 10), radius=18, outline=tone, width=7, fill=tone[:3] + (28,))
     sd.rounded_rectangle((22, 22, sw - 2, sh - 2), radius=12, outline=tone, width=3)
     sd.multiline_text(((sw + 20) / 2, (sh + 20) / 2), verdict, font=fs, fill=tone, anchor="mm", align="center", spacing=6)
     stamp = stamp.rotate(6, resample=Image.BICUBIC, expand=True)
 
     # Vertical budget: label gap + gauge + price block + stamp + stats must fit above the footer
-    fy = H - 44 - 178                                  # footer rule (contact band + site + disclaimer)
-    R, thick = 250, 46
+    fy = H - 40 - 182                                  # footer rule (contact band + site + disclaimer)
+    R, thick = 250, 44
     label_gap, price_block, stats_h, gaps = 64, 150, 104, 3 * 22
     need = lambda R: (label_gap + R if has_gauge else 0) + price_block + stamp.height + stats_h + gaps
     while R > 120 and top + need(R) > fy - 16:
@@ -805,30 +869,32 @@ def share_card_png(d: dict, r: dict, card: dict, today: str | None = None) -> by
         frac = lambda v: clip((v - lo) / (hi - lo), 0, 1)
         ang = lambda v: 180 + frac(v) * 180          # PIL: 0 deg = 3 o'clock, clockwise; top half = 180..360
         box = (cx - R, cy - R, cx + R, cy + R)
-        for a0, a1, col in ((lo, bb, "#9FD1B3"), (bb, fair, "#EBC77F"), (fair, hi, "#E8A49D")):
+        dr.arc((cx - R - 10, cy - R - 10, cx + R + 10, cy + R + 10), 180, 360, fill=_hex(C["line"]), width=2)
+        for a0, a1, col in ((lo, bb, C["arc_good"]), (bb, fair, C["arc_warn"]), (fair, hi, C["arc_bad"])):
             if a1 > a0:
                 dr.arc(box, ang(a0), ang(a1), fill=_hex(col), width=thick)
         # fair value tick + label just outside the arc
         t = m.radians(ang(fair))
         dr.line((cx + (R - thick - 12) * m.cos(t), cy + (R - thick - 12) * m.sin(t),
-                 cx + (R + 12) * m.cos(t), cy + (R + 12) * m.sin(t)), fill=ink, width=6)
-        lx, ly = cx + (R + 26) * m.cos(t), cy + (R + 26) * m.sin(t)
-        dr.text((lx, ly), f"Fair Rs{fair:,.0f}", font=_font("body", 26, 600), fill=ink,
+                 cx + (R + 16) * m.cos(t), cy + (R + 16) * m.sin(t)), fill=gold, width=6)
+        lx, ly = cx + (R + 30) * m.cos(t), cy + (R + 30) * m.sin(t)
+        dr.text((lx, ly), f"Fair value ₹{fair:,.0f}", font=_font("body", 26, 600), fill=gold,
                 anchor="md" if abs(m.cos(t)) < 0.35 else ("rd" if m.cos(t) < 0 else "ld"))
-        # needle
+        # needle with a gold hub
         n = m.radians(ang(price))
-        dr.line((cx, cy, cx + (R - thick - 26) * m.cos(n), cy + (R - thick - 26) * m.sin(n)), fill=ink, width=11)
-        dr.ellipse((cx - 20, cy - 20, cx + 20, cy + 20), fill=ink)
+        dr.line((cx, cy, cx + (R - thick - 26) * m.cos(n), cy + (R - thick - 26) * m.sin(n)), fill=white, width=10)
+        dr.ellipse((cx - 20, cy - 20, cx + 20, cy + 20), fill=gold)
+        dr.ellipse((cx - 8, cy - 8, cx + 8, cy + 8), fill=_hex(C["card"]))
         fz = _font("body", 26, 600)
-        dr.text((cx - R - 14, cy - 6), "Cheap", font=fz, fill=_hex(TONE["good"]), anchor="rd")
-        dr.text((cx + R + 14, cy - 6), "Costly", font=fz, fill=_hex(TONE["bad"]), anchor="ld")
-        y = cy + 22
+        dr.text((cx - R - 16, cy - 6), "Cheap", font=fz, fill=tones["good"], anchor="rd")
+        dr.text((cx + R + 16, cy - 6), "Costly", font=fz, fill=tones["bad"], anchor="ld")
+        y = cy + 24
     # price + % vs fair value
-    dr.text((cx, y), f"Rs{price:,.0f}" if price else "-", font=_font("display", 76, 700), fill=ink, anchor="ma")
+    dr.text((cx, y), f"₹{price:,.0f}" if price else "-", font=_font("display", 76, 700), fill=white, anchor="ma")
     if has_gauge:
         diff = (price / fair - 1) * 100
         dtxt = f"{abs(diff):.0f}% {'above' if diff > 0 else 'below'} fair value"
-        dcol = _hex(TONE["bad"] if diff > 0 else TONE["good"])
+        dcol = tones["bad"] if diff > 0 else tones["good"]
     else:
         dtxt, dcol = "Fair value not available", muted
     dr.text((cx, y + 92), dtxt, font=_font("body", 34, 600), fill=dcol, anchor="ma")
@@ -839,27 +905,29 @@ def share_card_png(d: dict, r: dict, card: dict, today: str | None = None) -> by
     y += stamp.height + 22
 
     # Stats row: fair value | buy below | report card
-    cols = [("Fair value", "-" if not fair else f"Rs{fair:,.0f}", ink),
-            ("Buy below", "-" if not bb else f"Rs{bb:,.0f}", _hex(TONE["good"])),
-            ("Report card", card["overall_grade"] + ("" if card["overall"] is None else f"  {card['overall']}/100"),
-             _hex(GRADE_COLOR[card["overall_grade"]]))]
+    og = card["overall_grade"]
+    cols = [("Fair value", "-" if not fair else f"₹{fair:,.0f}", white),
+            ("Buy below", "-" if not bb else f"₹{bb:,.0f}", tones["good"]),
+            ("Report card", og + ("" if card["overall"] is None else f"  {card['overall']}/100"),
+             tones[grade_tone[og]] if og in grade_tone else muted)]
     cw = (W - 2 * PAD) / 3
     for i, (lab, val, col) in enumerate(cols):
         x = PAD + cw * i + cw / 2
         dr.text((x, y), lab, font=_font("body", 28, 400), fill=muted, anchor="ma")
         dr.text((x, y + 40), val, font=_fit(dr, val, "display", 700, cw - 24, 48), fill=col, anchor="ma")
         if i:
-            dr.line((PAD + cw * i, y, PAD + cw * i, y + 96), fill=_hex(LINE), width=2)
+            dr.line((PAD + cw * i, y + 4, PAD + cw * i, y + 92), fill=_hex(C["line"]), width=2)
 
-    # Footer
-    dr.line((PAD, fy, W - PAD, fy), fill=_hex(LINE), width=2)
-    band = (PAD, fy + 18, W - PAD, fy + 88)
-    dr.rounded_rectangle(band, radius=16, fill=ink)
-    dr.text((W / 2, fy + 53), f"{CONTACT_LINE}: call {CONTACT_DISPLAY}",
-            font=_fit(dr, f"{CONTACT_LINE}: call {CONTACT_DISPLAY}", "body", 700, W - 2 * PAD - 40, 32),
-            fill=_hex(CARD), anchor="mm")
-    dr.text((W / 2, fy + 100), f"Check any NSE stock free at {SITE_URL}", font=_font("body", 30, 600), fill=ink, anchor="ma")
-    dr.text((W / 2, fy + 140), "For learning only. Not investment advice.", font=_font("body", 24, 400), fill=muted, anchor="ma")
+    # Footer: gold contact band, site link, disclaimer
+    dr.line((PAD, fy, W - PAD, fy), fill=_hex(C["line"]), width=2)
+    dr.rounded_rectangle((PAD, fy + 20, W - PAD, fy + 92), radius=16, fill=gold)
+    ctext = f"{CONTACT_LINE}. Call {CONTACT_DISPLAY}"
+    dr.text((W / 2, fy + 56), ctext, font=_fit(dr, ctext, "body", 700, W - 2 * PAD - 40, 32),
+            fill=_hex(C["card"]), anchor="mm")
+    dr.text((W / 2, fy + 106), f"Check any NSE stock for free at {SITE_URL}", font=_font("body", 29, 600),
+            fill=white, anchor="ma")
+    dr.text((W / 2, fy + 146), "For learning only. This is not investment advice.", font=_font("body", 24, 400),
+            fill=muted, anchor="ma")
 
     out = io.BytesIO()
     img.convert("RGB").save(out, format="PNG", optimize=True)
@@ -890,24 +958,21 @@ def app():
 
     st.set_page_config(page_title="Fair Value Finder", page_icon="⚖️", layout="wide")
     st.markdown(CSS, unsafe_allow_html=True)
-    st.markdown('<p class="fvf-brand">Fair Value Finder</p>'
-                '<p class="fvf-tag">Type any NSE stock. See what it is really worth, how strong the business is, '
-                'and whether today\'s price is a bargain.</p>', unsafe_allow_html=True)
-    st.markdown(contact_html(), unsafe_allow_html=True)
+    st.markdown(header_html(), unsafe_allow_html=True)
 
     with st.sidebar:
         st.header("Settings")
-        mos = st.slider("Margin of safety %", 0, 40, 15)
-        discount = st.slider("Discount rate / cost of equity %", 8.0, 18.0, 12.0, 0.5)
-        terminal = st.slider("Terminal growth %", 2.0, 7.0, 5.0, 0.5)
-        st.caption("Fair value = median of historical P/E, growth P/E, Graham number, and DCF "
-                   "(or justified P/B for banks).")
+        mos = st.slider("Margin of safety (%)", 0, 40, 15)
+        discount = st.slider("Discount rate / cost of equity (%)", 8.0, 18.0, 12.0, 0.5)
+        terminal = st.slider("Long-term growth rate (%)", 2.0, 7.0, 5.0, 0.5)
+        st.caption("Fair value is the middle value of four methods: historical P/E, growth-adjusted P/E, "
+                   "the Graham number and a cash-flow DCF (justified P/B for banks).")
         with st.expander("Correct Yahoo's numbers (optional, single stock only)"):
-            st.caption("Leave at 0 to use Yahoo's value. Copy the right figure from Screener.in if Yahoo is wrong or blank.")
-            ov_eps = st.number_input("EPS (TTM) Rs", min_value=0.0, value=0.0, step=0.5)
-            ov_bv = st.number_input("Book value / share Rs", min_value=0.0, value=0.0, step=1.0)
-            ov_roe = st.number_input("ROE %", min_value=0.0, value=0.0, step=0.5)
-            ov_g = st.number_input("Growth for valuation % (e.g. Screener 5-yr profit growth)", min_value=0.0, value=0.0, step=0.5)
+            st.caption("Leave a box at 0 to use Yahoo's value. If Yahoo's figure is wrong or blank, copy the correct one from Screener.in.")
+            ov_eps = st.number_input("EPS, last 12 months (₹)", min_value=0.0, value=0.0, step=0.5)
+            ov_bv = st.number_input("Book value per share (₹)", min_value=0.0, value=0.0, step=1.0)
+            ov_roe = st.number_input("Return on equity (%)", min_value=0.0, value=0.0, step=0.5)
+            ov_g = st.number_input("Growth rate for valuation (%), e.g. Screener's 5-year profit growth", min_value=0.0, value=0.0, step=0.5)
     overrides = {"eps": ov_eps or None, "bvps": ov_bv or None, "roe": ov_roe or None, "growth": ov_g or None}
 
     @st.cache_data(ttl=3600, show_spinner=False)
@@ -924,16 +989,16 @@ def app():
 
 def scanner_view(st, pd, cached_fetch, discount, terminal, mos):
     st.markdown("#### Which NIFTY 50 stocks are in the buy zone right now?")
-    st.caption("Runs every NIFTY 50 stock through the same checks as the single-stock page, using your sidebar "
-               "settings. The first scan takes 1-3 minutes; results are kept for an hour, so it is quick after that.")
+    st.caption("This runs every NIFTY 50 stock through the same checks as the single-stock page, using your "
+               "settings. The first scan takes one to three minutes. Results are saved for an hour, so later scans are quick.")
     if st.button("Run NIFTY 50 scan", type="primary"):
         st.session_state["scan_on"] = True
     if not st.session_state.get("scan_on"):
-        st.info("Press 'Run NIFTY 50 scan' to check all 50 stocks.")
+        st.info("Press \"Run NIFTY 50 scan\" to check all 50 stocks.")
         return
 
     rows, failed = [], []
-    bar = st.progress(0.0, text="Starting scan...")
+    bar = st.progress(0.0, text="Starting the scan…")
     for i, s in enumerate(NIFTY50):
         bar.progress(i / len(NIFTY50), text=f"Checking {s} ({i + 1}/{len(NIFTY50)})")
         try:
@@ -952,13 +1017,13 @@ def scanner_view(st, pd, cached_fetch, discount, terminal, mos):
             "Buy below": r["buy_below"],
             "Upside %": up,
             "Quality %": r["quality"],
-            "From 52w high %": ((r["price"] / d["hi52"] - 1) * 100) if (d.get("hi52") and r["price"]) else None,
+            "From 52-week high %": ((r["price"] / d["hi52"] - 1) * 100) if (d.get("hi52") and r["price"]) else None,
             "Sector": d["sector"],
         })
     bar.empty()
 
     if not rows:
-        st.error("Yahoo didn't return data for any stock. It may be limiting requests; wait a few minutes and press the button again.")
+        st.error("Yahoo did not return data for any stock. It may be limiting requests, so wait a few minutes and press the button again.")
         return
 
     df = pd.DataFrame(rows)
@@ -967,7 +1032,7 @@ def scanner_view(st, pd, cached_fetch, discount, terminal, mos):
     c[0].metric("Buy zone", int(counts.get("BUY ZONE", 0)))
     c[1].metric("Near fair value", int(counts.get("NEAR FAIR VALUE", 0)))
     c[2].metric("Above fair value", int(counts.get("ABOVE FAIR VALUE - NO BUY", 0)))
-    c[3].metric("Avoid (weak fundamentals)", int(counts.get("AVOID", 0)))
+    c[3].metric("Avoid (weak business)", int(counts.get("AVOID", 0)))
 
     present = [v for v in VERDICT_ORDER if v in set(df["Verdict"])]
     show = st.multiselect("Show", present, default=present)
@@ -977,20 +1042,20 @@ def scanner_view(st, pd, cached_fetch, discount, terminal, mos):
     st.dataframe(
         view, hide_index=True, width="stretch",
         column_config={
-            "Price": st.column_config.NumberColumn(format="Rs %.0f"),
-            "Fair value": st.column_config.NumberColumn(format="Rs %.0f"),
-            "Buy below": st.column_config.NumberColumn(format="Rs %.0f"),
+            "Price": st.column_config.NumberColumn(format="₹%.0f"),
+            "Fair value": st.column_config.NumberColumn(format="₹%.0f"),
+            "Buy below": st.column_config.NumberColumn(format="₹%.0f"),
             "Upside %": st.column_config.NumberColumn(format="%+.1f%%"),
             "Quality %": st.column_config.NumberColumn(format="%d%%"),
-            "From 52w high %": st.column_config.NumberColumn(format="%+.1f%%"),
+            "From 52-week high %": st.column_config.NumberColumn(format="%+.1f%%"),
         },
     )
-    st.caption("Sorted: buy zone first, then by upside to fair value. For full details of any stock, "
-               "type its symbol in the 'Single stock' tab.")
+    st.caption("Stocks in the buy zone are listed first, then sorted by upside to fair value. For full details "
+               "of any stock, type its symbol in the \"Single stock\" tab.")
     if failed:
-        st.warning(f"Yahoo didn't return data for {len(failed)} stock(s): {', '.join(failed)}. "
-                   "Press 'Run NIFTY 50 scan' again in a minute to retry them.")
-    st.caption("A buy-zone verdict is a starting point for your own research, not a recommendation.")
+        st.warning(f"Yahoo did not return data for {len(failed)} stock(s): {', '.join(failed)}. "
+                   "Press \"Run NIFTY 50 scan\" again in a minute to retry them.")
+    st.caption("A buy-zone verdict is a starting point for your own research. It is not a recommendation.")
 
 
 def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
@@ -999,63 +1064,63 @@ def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
     c2.write("")
     c2.button("Analyse", width="stretch", type="primary")
     if not sym:
-        st.info("Type an NSE symbol and press Analyse.")
+        st.info("Type an NSE symbol, such as TCS or SBIN, and press Analyse.")
         return
 
-    with st.spinner(f"Fetching {to_yahoo(sym)} from Yahoo Finance..."):
+    with st.spinner(f"Fetching {to_yahoo(sym)} from Yahoo Finance…"):
         try:
             d = cached_fetch(sym)
         except Exception as e:
-            st.error(f"Couldn't load {sym}: {e}. If Yahoo is busy, wait a minute and try again.")
+            st.error(f"Could not load {sym}: {e} If Yahoo is busy, wait a minute and try again.")
             return
     r = analyse(d, discount, terminal, mos, overrides)
     if any(overrides.values()):
-        st.info("Using your corrected numbers from the sidebar.")
+        st.info("Your corrected numbers from the sidebar are being used.")
 
     st.markdown(hero_html(d, r), unsafe_allow_html=True)
 
     card = report_card(r, d)
     g_col, rc_col = st.columns([1, 1.25], gap="medium")
     with g_col:
-        with st.container(border=True):
+        with st.container(border=True, key="fvf-panel-gauge"):
             st.markdown("#### Price vs fair value")
             if r["fair"] and r["price"]:
                 st.plotly_chart(gauge_fig(r), config=PLOTLY_CFG, width="stretch")
-                st.caption("Green: buy zone (below your margin of safety). Amber: under fair value. "
-                           "Red: above fair value. The dark tick is fair value.")
+                st.caption("Green is the buy zone, amber is below fair value, and red is above fair value. "
+                           "The dark tick marks fair value.")
             else:
-                st.info("No fair value for this stock, so the meter is hidden.")
+                st.info("This stock has no fair value, so the meter is hidden.")
     with rc_col:
-        with st.container(border=True):
+        with st.container(border=True, key="fvf-panel-card"):
             st.markdown(f"#### Report card: **{card['overall_grade']}**"
                         + ("" if card["overall"] is None else f"  ({card['overall']}/100)"))
             st.markdown(grades_html(card), unsafe_allow_html=True)
             rf = radar_fig(card)
             if rf is not None:
                 st.plotly_chart(rf, config=PLOTLY_CFG, width="stretch")
-            st.caption("Scores compare this company with simple benchmarks, not with other companies. "
+            st.caption("Each score compares the company with a simple benchmark, not with other companies. "
                        "Categories without data are left out of the overall grade.")
 
-    with st.container(border=True):
+    with st.container(border=True, key="fvf-panel-share"):
         s_text, s_btn = st.columns([3, 1.3], vertical_alignment="center")
         s_text.markdown("#### Share this result\nDownload a ready-made picture for WhatsApp, Instagram or "
-                        "your status. It shows the verdict, the meter and the report card.")
+                        "your status. It shows the verdict, the price meter and the report card.")
         try:
             png = share_card_png(d, r, card)
             fname = d["symbol"].split(".")[0].replace("&", "and") + "-fair-value.png"
             s_btn.download_button("Download share picture", png, file_name=fname, mime="image/png",
-                                  type="primary", width="stretch")
+                                  type="primary", width="stretch", key="fvf-share-btn")
             with st.expander("Preview the picture"):
                 st.image(png, width=420)
         except Exception as e:
-            s_btn.caption(f"Share picture unavailable: {e}")
+            s_btn.caption(f"The share picture could not be made: {e}")
 
     m = st.columns(5)
     m[0].metric("Price", rs(r["price"]))
     m[1].metric("Fair value", rs(r["fair"]))
     m[2].metric("Buy below", rs(r["buy_below"]))
     up = (r["fair"] / r["price"] - 1) * 100 if r["fair"] and r["price"] else None
-    m[3].metric("Upside to fair", pct(up, True))
+    m[3].metric("Upside to fair value", pct(up, True))
     if d.get("hi52") and d.get("lo52") and r["price"]:
         m[4].metric("52-week low / high", f"{d['lo52']:,.0f} / {d['hi52']:,.0f}",
                     f"{(r['price'] / d['hi52'] - 1) * 100:.1f}% from high", delta_color="off")
@@ -1065,16 +1130,16 @@ def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
     with tab1:
         left, right = st.columns(2)
         with left:
-            st.markdown("#### Quality checks" + (" (bank set)" if r["lender"] else ""))
+            st.markdown("#### Quality checks" + (" (for banks)" if r["lender"] else ""))
             st.dataframe(pd.DataFrame([{
                 "Check": c["check"], "Value": fmt_check(c), "Good if": c["rule"],
-                "Result": "no data" if c["ok"] is None else ("PASS" if c["ok"] else "FAIL")} for c in r["checks"]]),
+                "Result": "No data" if c["ok"] is None else ("Pass" if c["ok"] else "Fail")} for c in r["checks"]]),
                 hide_index=True, width="stretch")
         with right:
             st.markdown("#### Fair value methods")
             for n, v, how in r["methods"]:
                 st.markdown(f"**{n}: {rs(v) if v else 'n/a'}**  \n<small>{how}</small>", unsafe_allow_html=True)
-            st.caption("Fair value is the middle value of the methods that apply.")
+            st.caption("Fair value is the middle value of the methods that can be used.")
 
     with tab2:
         prices = d.get("prices") or []
@@ -1084,8 +1149,8 @@ def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
             span = st.radio("Period", list(spans), horizontal=True, index=1)
             st.plotly_chart(candle_fig(ohlc, r["fair"], r["buy_below"], spans[span]),
                             config=PLOTLY_CFG, width="stretch")
-            st.caption("Dashed line: today's fair value. Shaded green band: the buy zone. Dotted line: "
-                       "200-day average price. Candles inside the green band were bargains by today's estimate.")
+            st.caption("The dashed line is today's fair value, the shaded green band is the buy zone, and the dotted "
+                       "line is the 200-day average price. Candles inside the green band were bargains by today's estimate.")
         elif prices:
             span = st.radio("Period", ["1 year", "5 years"], horizontal=True, index=0)
             pts = prices[-252:] if span == "1 year" else prices
@@ -1095,23 +1160,23 @@ def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
                 df["Buy below"] = r["buy_below"]
             st.line_chart(df)
         else:
-            st.warning("Price history not available for this stock.")
+            st.warning("Price history is not available for this stock.")
 
     with tab3:
         rows = project(r)
         if rows:
-            st.markdown(f"#### If the company keeps growing at about **{r['g_used']:.1f}%** a year")
-            st.caption(f"Growth source: {r['g_src']}. Base keeps today's P/E. "
-                       "Bear = half the growth and a 20% lower P/E. "
-                       "Bull = 1.5x growth and a higher P/E (15% more, or halfway back to its usual P/E if that is higher).")
+            st.markdown(f"#### If the company keeps growing by about **{r['g_used']:.1f}%** a year")
+            st.caption(f"Growth source: {r['g_src']}. The base case keeps today's P/E. The bear case uses half the growth "
+                       "and a 20% lower P/E. The bull case uses 1.5× the growth and a higher P/E (15% higher, or halfway back "
+                       "to its usual P/E if that is higher).")
             st.dataframe(pd.DataFrame([{
                 "In": f"{row['years']} year" + ("s" if row["years"] > 1 else ""),
                 "Bear": rs(row["Bear"]), "Base": rs(row["Base"]), "Bull": rs(row["Bull"]),
-                "Base return / yr": pct(row["Base CAGR"], True)} for row in rows]),
+                "Base return per year": pct(row["Base CAGR"], True)} for row in rows]),
                 hide_index=True, width="stretch")
         else:
-            st.warning("Can't project: needs positive earnings.")
-        st.markdown("#### What analysts expect (from reports Yahoo collects)")
+            st.warning("Future prices need positive earnings, so they are not shown for this stock.")
+        st.markdown("#### What analysts expect (from reports collected by Yahoo)")
         if d.get("target_mean"):
             a = st.columns(4)
             a[0].metric("Low target", rs(d.get("target_low")))
@@ -1120,21 +1185,21 @@ def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
             a[2].metric("High target", rs(d.get("target_high")))
             a[3].metric("Analysts", "-" if not d.get("n_analysts") else f"{int(d['n_analysts'])}",
                         (d.get("rec") or "").replace("_", " ").title() or None, delta_color="off")
-            st.caption("Analyst targets are usually 12-month targets. They are not used in the fair value.")
+            st.caption("Analyst targets are usually 12-month targets. They are not used to calculate fair value.")
         else:
-            st.caption("No analyst targets available for this stock.")
-        st.caption("Projections assume past growth continues. Real results can be very different.")
+            st.caption("No analyst targets are available for this stock.")
+        st.caption("These projections assume past growth continues. Real results can be very different.")
 
     with tab4:
         H = d["hist"]
         n = min(len(H["years"]), len(H["revenue"]), len(H["net_income"]))
         if n:
-            st.markdown("#### Revenue and net profit (Rs crore)")
+            st.markdown("#### Revenue and net profit (₹ crore)")
             chart = pd.DataFrame({"Revenue": [v / 1e7 for v in H["revenue"][-n:]],
                                   "Net profit": [v / 1e7 for v in H["net_income"][-n:]]},
                                  index=[f"FY{y[-2:]}" for y in H["years"][-n:]])
             st.bar_chart(chart, stack=False)
-            st.caption(f"Yahoo provides {n} years of annual data, so growth rates use {n - 1} years.")
+            st.caption(f"Yahoo provides {n} years of annual data, so growth rates are based on {n - 1} years.")
         k = st.columns(4)
         k[0].metric("Market cap", crore(d["mcap"]))
         k[1].metric("P/E (now / usual)", ("-" if d["pe"] is None else f"{d['pe']:.1f}")
@@ -1148,9 +1213,10 @@ def single_view(st, pd, cached_fetch, discount, terminal, mos, overrides):
         k2[3].metric("ROA", pct(d.get("roa")))
 
     if r["lender"]:
-        st.warning("Bank/NBFC: also check Gross/Net NPA, NIM, CASA and capital adequacy on the bank's investor page.")
-    st.caption("Educational tool, not investment advice. Promoter holding, pledges and governance are not in "
-               "this data - check NSE before buying. Yahoo data can lag or have gaps for smaller companies.")
+        st.warning("For banks and NBFCs, also check gross and net NPA, net interest margin, CASA ratio and capital "
+                   "adequacy on the company's investor relations page.")
+    st.caption("This is an educational tool, not investment advice. Promoter holding, pledges and governance are "
+               "not covered here, so check NSE before you buy. Yahoo data can be delayed or incomplete for smaller companies.")
 
 
 def _running_in_streamlit() -> bool:
