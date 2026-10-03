@@ -78,6 +78,7 @@ TEXT = {
     "r_missing": (" {n} checks had no data, so treat the quality score with care.",
                   " {n} சோதனைகளுக்குத் தரவு இல்லை, எனவே தர மதிப்பெண்ணைக் கவனமாகப் பாருங்கள்."),
     # header
+    "byline": ("by Thamizhvanan Ravi", "உருவாக்கம்: தமிழ்வாணன் ரவி"),
     "tagline": ("Type any NSE stock to see what it is really worth, how strong the business is, and whether today's price is a bargain.",
                 "எந்த NSE பங்கையும் தட்டச்சு செய்யுங்கள். அதன் உண்மையான மதிப்பு என்ன, நிறுவனம் எவ்வளவு வலுவானது, இன்றைய விலை மலிவானதா என்பதைப் பாருங்கள்."),
     "contact_line": ("Learn stock market trading and options buying",
@@ -875,6 +876,7 @@ h4 {{ font-weight: 700; }}
 .fvf-brandrow {{ display: flex; align-items: center; gap: .7rem; }}
 .fvf-logo {{ width: 38px; height: 38px; color: {GOLD}; flex: 0 0 auto; }}
 .fvf-head .fvf-brand {{ font-size: 2.15rem; font-weight: 800; line-height: 1.05; margin: 0; color: {EMERALD}; }}
+.fvf-byline {{ color: {GOLD_TEXT}; font-weight: 600; font-size: 1rem; margin-top: .25rem; letter-spacing: .01em; }}
 .fvf-tag {{ color: {MUTED}; margin: .65rem 0 1.15rem; font-size: 1.07rem; line-height: 1.5; max-width: 60ch; }}
 .fvf-contact {{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .7rem 1rem;
                border-top: 1px solid rgba(201,154,62,.35); padding-top: 1rem; }}
@@ -1004,7 +1006,8 @@ def hero_html(d, r):
 def header_html():
     from urllib.parse import quote
     wa = f"https://wa.me/91{CONTACT_PHONE}?text=" + quote(tr("wa_msg"))
-    return (f'<div class="fvf-head"><div class="fvf-brandrow">{LOGO_SVG}<div class="fvf-brand">Fair Value Finder</div></div>'
+    return (f'<div class="fvf-head"><div class="fvf-brandrow">{LOGO_SVG}<div><div class="fvf-brand">Fair Value Finder</div>'
+            f'<div class="fvf-byline">{_esc(tr("byline"))}</div></div></div>'
             f'<p class="fvf-tag">{_esc(tr("tagline"))}</p>'
             f'<div class="fvf-contact"><p><b>{_esc(tr("contact_line"))}.</b> {_esc(tr("contact_call", p=CONTACT_DISPLAY))}</p>'
             f'<div class="fvf-links"><a class="gold" href="tel:+91{CONTACT_PHONE}">{_esc(tr("btn_call"))}</a>'
@@ -1312,7 +1315,8 @@ def share_card_png(d: dict, r: dict, card: dict, today: str | None = None, lang:
         except Exception:
             today = datetime.date.today().strftime("%d %b %Y")
     _scale_mark(dr, PAD + 22, 108, 22, gold)
-    dr.text((PAD + 64, 88), "Fair Value Finder", font=_font("display", 34, 700), fill=_hex(C["brand"]))
+    dr.text((PAD + 64, 78), "Fair Value Finder", font=_font("display", 34, 700), fill=_hex(C["brand"]))
+    dr.text((PAD + 64, 118), tr("byline", lang), font=_font(TB, 20 if ta else 22, 600), fill=_hex(GOLD_TEXT))
     fd = _font("body", 28, 400)
     dr.text((W - PAD - dr.textlength(today, font=fd), 94), today, font=fd, fill=muted)
     dr.line((PAD, 152, W - PAD, 152), fill=_hex(C["line"]), width=2)
@@ -1487,7 +1491,7 @@ def app():
     import pandas as pd
     import streamlit as st
 
-    st.set_page_config(page_title="Fair Value Finder", page_icon="⚖️", layout="wide")
+    st.set_page_config(page_title="Fair Value Finder by Thamizhvanan Ravi", page_icon="⚖️", layout="wide")
     st.markdown(CSS, unsafe_allow_html=True)
 
     # Language switch (top right, visible on phones too, where the sidebar is hidden)
