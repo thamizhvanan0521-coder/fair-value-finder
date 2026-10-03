@@ -853,7 +853,7 @@ EMERALD, GOLD, GOLD_TEXT, GOLD_SOFT = "#0F7A5C", "#C99A3E", "#8A6420", "#F7EEDA"
 # Surya (next bhukti) gold accents. Dark navy/black left out on purpose.
 TONE = {"good": "#1F7A4D", "warn": "#A86400", "bad": "#B42318"}
 GRADE_COLOR = {"A": "#1F7A4D", "B": "#3E8E5E", "C": "#A86400", "D": "#C2410C", "F": "#B42318", "-": MUTED}
-FONT = "Source Sans 3, Noto Sans Tamil, Segoe UI, sans-serif"
+FONT = "'Source Sans 3', 'Noto Sans Tamil', 'Segoe UI', sans-serif"
 SHADOW = "0 1px 2px rgba(29,59,52,.05), 0 10px 28px rgba(29,59,52,.06)"
 
 LOGO_SVG = ('<svg class="fvf-logo" viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke="currentColor" '
@@ -1020,7 +1020,7 @@ def grades_html(card):
 
 def _base_layout(fig, height):
     fig.update_layout(height=height, margin=dict(l=20, r=20, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)",
-                      plot_bgcolor="rgba(0,0,0,0)", font=dict(family=FONT + ", Noto Sans Tamil", color="#1D3B34", size=13))
+                      plot_bgcolor="rgba(0,0,0,0)", font=dict(family=FONT, color="#1D3B34", size=13))
     return fig
 
 
@@ -1056,13 +1056,13 @@ def gauge_svg(r):
     return (f'<div class="fvf-gauge"><svg viewBox="-44 -22 408 262" role="img" aria-label="{_esc(label)}">'
             f'{segs}'
             f'<line x1="{tx0:.1f}" y1="{ty0:.1f}" x2="{tx1:.1f}" y2="{ty1:.1f}" stroke="{GOLD_TEXT}" stroke-width="4" stroke-linecap="round"/>'
-            f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="{anchor}" class="g-fair">{_esc(tr("lbl_fair", x=f"{fair:,.0f}"))}</text>'
+            f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="{anchor}" class="g-fair" font-size="12.5" font-weight="600">{_esc(tr("lbl_fair", x=f"{fair:,.0f}"))}</text>'
             f'<line x1="{cx}" y1="{cy}" x2="{nx:.1f}" y2="{ny:.1f}" stroke="{INK}" stroke-width="6" stroke-linecap="round"/>'
             f'<circle cx="{cx}" cy="{cy}" r="11" fill="{GOLD}"/><circle cx="{cx}" cy="{cy}" r="4.5" fill="#fff"/>'
-            f'<text x="{cx - R}" y="{cy + 22}" text-anchor="middle" class="g-end" fill="{TONE["good"]}">{_esc(tr("card_cheap"))}</text>'
-            f'<text x="{cx + R}" y="{cy + 22}" text-anchor="middle" class="g-end" fill="{TONE["bad"]}">{_esc(tr("card_costly"))}</text>'
-            f'<text x="{cx}" y="{cy + 50}" text-anchor="middle" class="g-price">₹{price:,.0f}</text>'
-            f'<text x="{cx}" y="{cy + 76}" text-anchor="middle" class="g-diff" fill="{dcol}">{_esc(dtxt)}</text>'
+            f'<text x="{cx - R}" y="{cy + 22}" text-anchor="middle" class="g-end" font-size="12.5" font-weight="600" fill="{TONE["good"]}">{_esc(tr("card_cheap"))}</text>'
+            f'<text x="{cx + R}" y="{cy + 22}" text-anchor="middle" class="g-end" font-size="12.5" font-weight="600" fill="{TONE["bad"]}">{_esc(tr("card_costly"))}</text>'
+            f'<text x="{cx}" y="{cy + 50}" text-anchor="middle" class="g-price" font-size="32" font-weight="800">₹{price:,.0f}</text>'
+            f'<text x="{cx}" y="{cy + 76}" text-anchor="middle" class="g-diff" font-size="15" font-weight="700" fill="{dcol}">{_esc(dtxt)}</text>'
             f'</svg></div>')
 
 
