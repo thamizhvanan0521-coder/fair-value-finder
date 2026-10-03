@@ -546,6 +546,14 @@ h1, h2, h3, h4, .fvf-name, .fvf-brand {{ font-family: 'Bricolage Grotesque', {FO
 .fvf-grade b {{ font-family: 'Bricolage Grotesque', {FONT}; font-size: 1.5rem; color: var(--c); min-width: 1.2ch; }}
 .fvf-grade span {{ font-size: .85rem; color: #1A1F36; line-height: 1.2; }}
 .fvf-grade em {{ display: block; font-style: normal; color: {MUTED}; font-size: .78rem; }}
+.fvf-contact {{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1rem;
+                background: {INK}; color: #fff; border-radius: 12px; padding: .75rem 1.1rem; margin: 0 0 1rem; }}
+.fvf-contact p {{ margin: 0; color: #fff; font-size: 1.02rem; }}
+.fvf-contact b {{ font-family: 'Bricolage Grotesque', {FONT}; }}
+.fvf-contact .fvf-links {{ display: flex; gap: .5rem; flex-wrap: wrap; }}
+.fvf-contact a {{ color: {INK} !important; background: #fff; border-radius: 8px; padding: .4rem .85rem; font-weight: 600;
+                 text-decoration: none; white-space: nowrap; }}
+.fvf-contact a:focus-visible {{ outline: 3px solid #9FD1B3; outline-offset: 2px; }}
 [data-testid="stMetric"] {{ background: {CARD}; border: 1px solid {LINE}; border-radius: 12px; padding: .7rem .9rem; }}
 [data-testid="stMetricLabel"] p {{ color: {MUTED}; }}
 [data-testid="stMetricValue"] {{ font-family: 'Bricolage Grotesque', {FONT}; color: {INK}; }}
@@ -572,6 +580,13 @@ def hero_html(d, r):
             f'<p class="fvf-sub">{_esc(sub)}</p><p class="fvf-reason">{_esc(r["reason"])}</p></div>'
             f'<div class="fvf-stamp" style="--c:{c}" role="img" aria-label="Verdict: {_esc(r["verdict"])}">'
             f'{_esc(r["verdict"])}{q}</div></div>')
+
+
+def contact_html():
+    wa = f"https://wa.me/91{CONTACT_PHONE}?text=" + "Hi%2C%20I%20want%20to%20learn%20trading%20and%20option%20buying"
+    return (f'<div class="fvf-contact"><p><b>{CONTACT_LINE}.</b> Call or WhatsApp {CONTACT_DISPLAY}</p>'
+            f'<div class="fvf-links"><a href="tel:+91{CONTACT_PHONE}">Call</a>'
+            f'<a href="{wa}" target="_blank" rel="noopener">WhatsApp</a></div></div>')
 
 
 def grades_html(card):
@@ -665,6 +680,9 @@ def candle_fig(ohlc, fair=None, buy_below=None, months=12):
 PLOTLY_CFG = {"displayModeBar": False, "responsive": True}
 
 SITE_URL = "fair-value-finder.streamlit.app"
+CONTACT_PHONE = "8610025411"                       # shown on the site and on every share picture
+CONTACT_DISPLAY = "86100 25411"
+CONTACT_LINE = "Learn stock market trading and option buying"
 
 
 # ----------------------------------------------------------------------------
@@ -770,11 +788,11 @@ def share_card_png(d: dict, r: dict, card: dict, today: str | None = None) -> by
     stamp = stamp.rotate(6, resample=Image.BICUBIC, expand=True)
 
     # Vertical budget: label gap + gauge + price block + stamp + stats must fit above the footer
-    fy = H - 44 - 112                                  # footer rule
+    fy = H - 44 - 178                                  # footer rule (contact band + site + disclaimer)
     R, thick = 250, 46
     label_gap, price_block, stats_h, gaps = 64, 150, 104, 3 * 22
     need = lambda R: (label_gap + R if has_gauge else 0) + price_block + stamp.height + stats_h + gaps
-    while R > 170 and top + need(R) > fy - 16:
+    while R > 120 and top + need(R) > fy - 16:
         R -= 10
     spare = max(0, (fy - 16) - (top + need(R)))
     y = top + spare / 2                                # centre the block in whatever room is left
@@ -835,8 +853,13 @@ def share_card_png(d: dict, r: dict, card: dict, today: str | None = None) -> by
 
     # Footer
     dr.line((PAD, fy, W - PAD, fy), fill=_hex(LINE), width=2)
-    dr.text((W / 2, fy + 26), f"Check any NSE stock free at {SITE_URL}", font=_font("body", 32, 600), fill=ink, anchor="ma")
-    dr.text((W / 2, fy + 70), "For learning only. Not investment advice.", font=_font("body", 26, 400), fill=muted, anchor="ma")
+    band = (PAD, fy + 18, W - PAD, fy + 88)
+    dr.rounded_rectangle(band, radius=16, fill=ink)
+    dr.text((W / 2, fy + 53), f"{CONTACT_LINE}: call {CONTACT_DISPLAY}",
+            font=_fit(dr, f"{CONTACT_LINE}: call {CONTACT_DISPLAY}", "body", 700, W - 2 * PAD - 40, 32),
+            fill=_hex(CARD), anchor="mm")
+    dr.text((W / 2, fy + 100), f"Check any NSE stock free at {SITE_URL}", font=_font("body", 30, 600), fill=ink, anchor="ma")
+    dr.text((W / 2, fy + 140), "For learning only. Not investment advice.", font=_font("body", 24, 400), fill=muted, anchor="ma")
 
     out = io.BytesIO()
     img.convert("RGB").save(out, format="PNG", optimize=True)
@@ -870,6 +893,7 @@ def app():
     st.markdown('<p class="fvf-brand">Fair Value Finder</p>'
                 '<p class="fvf-tag">Type any NSE stock. See what it is really worth, how strong the business is, '
                 'and whether today\'s price is a bargain.</p>', unsafe_allow_html=True)
+    st.markdown(contact_html(), unsafe_allow_html=True)
 
     with st.sidebar:
         st.header("Settings")
